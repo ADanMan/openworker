@@ -10,7 +10,9 @@ interface NativeBridge {
   setReminders(json: string): void
   share(title: string, text: string): void
   saveFile(name: string, mime: string, base64: string): void
-  takeLaunchTask(): string
+  takeIntent(): string
+  voiceAvailable(): boolean
+  startVoice(lang: string, prompt: string): void
   minimize(): void
   fetchText(id: number, url: string): void
 }
@@ -21,6 +23,9 @@ declare global {
     __otBack?: () => boolean
     __otNotifResult?: (granted: boolean) => void
     __otFetch?: (id: number, ok: boolean, text: string) => void
+    __otVoice?: (ok: boolean, text: string) => void
+    webkitSpeechRecognition?: new () => BrowserRecognition
+    SpeechRecognition?: new () => BrowserRecognition
   }
 }
 
@@ -135,16 +140,90 @@ export function installBackButton() {
   }
 }
 
-/** Tapping a reminder notification opens its task. */
-export function onReminderTap(open: (taskId: string, date: string | null) => void) {
-  if (!bridge) return () => {}
-  const take = () => {
-    const [id, date] = bridge.takeLaunchTask().split('|')
-    if (id) open(id, date || null)
+/** What opened (or re-focused) the app from outside. */
+export type ExternalIntent =
+  | { kind: 'task'; taskId: string; date: string | null } // tap on a reminder
+  | { kind: 'voice' } // launcher shortcut "Voice task"
+  | { kind: 'new' } // launcher shortcut "New task"
+  | { kind: 'text'; text: string } // text shared from another app
+
+/** Delivers external intents: once for the launch intent, then for every new one. */
+export function onExternalIntent(handle: (intent: ExternalIntent) => void) {
+  if (bridge) {
+    // Methods added after 1.0 are checked before use (see docs/20-architecture.md, section 6).
+    if (typeof bridge.takeIntent !== 'function') return () => {}
+    const take = () => {
+      const raw = bridge.takeIntent()
+      if (!raw) return
+      try {
+        const i = JSON.parse(raw) as ExternalIntent & { date?: string }
+        handle(i.kind === 'task' ? { ...i, date: i.date || null } : i)
+      } catch {
+        /* malformed intent from the shell: ignore */
+      }
+    }
+    take()
+    window.addEventListener('ot-intent', take)
+    return () => window.removeEventListener('ot-intent', take)
   }
-  take()
-  window.addEventListener('ot-open-task', take)
-  return () => window.removeEventListener('ot-open-task', take)
+  // PWA share target (manifest share_target, GET): ?title=&text=&url=
+  const q = new URLSearchParams(location.search)
+  const shared = [q.get('title'), q.get('text'), q.get('url')].filter(Boolean).join(' ').trim()
+  if (shared) {
+    history.replaceState(null, '', location.pathname + location.hash)
+    handle({ kind: 'text', text: shared })
+  }
+  return () => {}
+}
+
+interface BrowserRecognition {
+  lang: string
+  interimResults: boolean
+  maxAlternatives: number
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onerror: ((e: { error: string }) => void) | null
+  onend: (() => void) | null
+  start(): void
+}
+
+const browserRecognition = () =>
+  typeof window === 'undefined' ? undefined : (window.SpeechRecognition ?? window.webkitSpeechRecognition)
+
+/** Speech input exists: Android recognizer app, or Web Speech API in the browser. */
+export function voiceAvailable(): boolean {
+  if (bridge) return typeof bridge.voiceAvailable === 'function' && bridge.voiceAvailable()
+  return !!browserRecognition()
+}
+
+/**
+ * Listen once and resolve with the recognised phrase ("" if nothing was said).
+ * Android: the system speech dialog (Google app). Browser: Web Speech API.
+ */
+export function listen(lang: string, prompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (bridge) {
+      window.__otVoice = (ok, text) => {
+        window.__otVoice = undefined
+        if (ok) resolve(text)
+        else reject(new Error(text))
+      }
+      bridge.startVoice(lang, prompt)
+      return
+    }
+    const Ctor = browserRecognition()
+    if (!Ctor) return reject(new Error('unsupported'))
+    const rec = new Ctor()
+    let heard = ''
+    rec.lang = lang
+    rec.interimResults = false
+    rec.maxAlternatives = 1
+    rec.onresult = (e) => {
+      heard = e.results[0]?.[0]?.transcript ?? ''
+    }
+    rec.onerror = (e) => reject(new Error(e.error))
+    rec.onend = () => resolve(heard)
+    rec.start()
+  })
 }
 
 const pendingFetches = new Map<number, { resolve: (text: string) => void; reject: (e: Error) => void }>()

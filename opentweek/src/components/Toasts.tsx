@@ -4,7 +4,7 @@ export function Toasts() {
   const toasts = useToasts()
   return (
     <div className="toasts" role="status" aria-live="polite">
-      {toasts.map((t) => (
+      {toasts.slice(-3).map((t) => (
         <div key={t.id} className="toast">
           <span>{t.message}</span>
           {t.action && (

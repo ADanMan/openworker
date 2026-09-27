@@ -1,4 +1,5 @@
 import { db, uid } from './db'
+import type { QuickAdd } from './lib/quickadd'
 import type { ContainerId, Item, SomedayList, Task } from './types'
 
 export const dayContainer = (date: string): ContainerId => `day:${date}`
@@ -47,6 +48,13 @@ export async function addTask(calendarId: string, container: ContainerId, title:
   const task = newTask({ calendarId, date, listId, title: title.trim(), order })
   await db.tasks.add(task)
   return task
+}
+
+/** Create a task from a parsed quick-add phrase (voice or shared text). */
+export async function addQuickTask(calendarId: string, q: QuickAdd) {
+  const task = await addTask(calendarId, dayContainer(q.date), q.title)
+  if (q.reminder || q.rrule) await updateTask(task.id, { reminder: q.reminder, rrule: q.rrule })
+  return { ...task, reminder: q.reminder, rrule: q.rrule }
 }
 
 export async function updateTask(id: string, patch: Partial<Task>) {

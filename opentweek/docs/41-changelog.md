@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-27
+
+### Added
+- Голосовой ввод задач: кнопка микрофона в шапке и клавиша `V`. На Android — системный `RecognizerIntent`, в браузере — Web Speech API.
+- `src/lib/quickadd.ts`: разбор фраз на ru и en в заголовок, день, время напоминания и повтор; 7 тестов.
+- Ярлыки на иконке «Голосовая задача» и «Новая задача» (`Shortcuts.java`, `ShortcutManager` через рефлексию).
+- Приём текста из «Поделиться» (`ACTION_SEND text/plain`) и экспериментальный фильтр «заметка себе» (`AUTO_SEND`); PWA `share_target`.
+- ADR-0010, тикеты T-116, T-117.
+
+### Changed
+- Мост: `takeLaunchTask()` заменён на `takeIntent()` с JSON; событие `ot-open-task` заменено на `ot-intent`; добавлены `voiceAvailable()`, `startVoice()`.
+- Тосты занимают ширину экрана до 440 px, на экране не больше трёх.
+
 ## [1.0.0] — 2026-09-27
 
 ### Added

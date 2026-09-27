@@ -6,6 +6,7 @@ const SHORTCUTS: [string, Key][] = [
   ['T', 'kToday'],
   ['W / M', 'kView'],
   ['N', 'kNew'],
+  ['V', 'kVoice'],
   ['/ · Ctrl+K', 'kSearch'],
   ['H', 'kHide'],
   ['S', 'kSomeday'],

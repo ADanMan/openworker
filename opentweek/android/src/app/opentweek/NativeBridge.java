@@ -57,12 +57,26 @@ public class NativeBridge {
         activity.startSave(name, mime, base64);
     }
 
-    /** "taskId|date" of the reminder that launched the app, consumed once; "" if none. */
+    /**
+     * The external intent that opened or re-focused the app, as JSON, consumed once; "" if none.
+     * {"kind":"task","taskId","date"} | {"kind":"voice"} | {"kind":"new"} | {"kind":"text","text"}
+     */
     @JavascriptInterface
-    public String takeLaunchTask() {
-        String t = activity.launchTask;
-        activity.launchTask = "";
+    public String takeIntent() {
+        String t = activity.pendingIntent;
+        activity.pendingIntent = "";
         return t;
+    }
+
+    @JavascriptInterface
+    public boolean voiceAvailable() {
+        return activity.voiceAvailable();
+    }
+
+    /** System speech dialog; the phrase arrives via window.__otVoice(ok, text). */
+    @JavascriptInterface
+    public void startVoice(String lang, String prompt) {
+        activity.startVoice(lang, prompt);
     }
 
     @JavascriptInterface

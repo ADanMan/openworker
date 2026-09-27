@@ -4,4 +4,6 @@
     <string name="saved">Сохранено</string>
     <string name="save_failed">Не удалось сохранить файл</string>
     <string name="share">Поделиться</string>
+    <string name="shortcut_voice">Голосовая задача</string>
+    <string name="shortcut_new">Новая задача</string>
 </resources>

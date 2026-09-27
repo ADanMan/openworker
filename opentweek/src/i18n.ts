@@ -177,6 +177,13 @@ const en = {
   kDone: 'Toggle focused task done',
   kDelete: 'Delete focused task (undo available)',
   kDrag: 'Pick up, move, drop focused task',
+  kVoice: 'Voice task',
+  voiceTask: 'Voice task',
+  voicePrompt: 'Say a task, e.g. "tomorrow at 9 call mom"',
+  voiceFailed: 'Could not recognise speech',
+  quickAdded: 'Added: {title} — {when}',
+  open: 'Open',
+  enableReminders: 'Turn on reminder notifications in Settings to get alerted',
 }
 
 export type Key = keyof typeof en
@@ -347,6 +354,13 @@ const ruDict: Record<Key, string> = {
   kDone: 'Отметить выполненной',
   kDelete: 'Удалить задачу (можно отменить)',
   kDrag: 'Взять, переместить, положить задачу',
+  kVoice: 'Голосовая задача',
+  voiceTask: 'Голосовая задача',
+  voicePrompt: 'Скажите задачу, например «завтра в 9 позвонить маме»',
+  voiceFailed: 'Не удалось распознать речь',
+  quickAdded: 'Добавлено: {title} — {when}',
+  open: 'Открыть',
+  enableReminders: 'Включите уведомления о напоминаниях в настройках, чтобы получить сигнал',
 }
 
 const dictionaries = { en, ru: ruDict } as const

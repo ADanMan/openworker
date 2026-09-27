@@ -61,7 +61,7 @@ PWA остаётся основным способом использовани�
 ### 3.3. Своя оболочка на WebView (выбран)
 
 Назначение: `Activity` с `WebView`, бандл из `assets/www`, мост `@JavascriptInterface`.
-Преимущества: около 530 строк Java; собирается инструментами из архива Ubuntu за 3 с; APK 348 КБ; нет сторонних нативных зависимостей.
+Преимущества: около 670 строк Java; собирается инструментами из архива Ubuntu за 3 с; APK 348 КБ; нет сторонних нативных зависимостей.
 Ограничения: компиляция против `android.jar` API 23, поэтому API 24–34 вызываются через рефлексию; `targetSdk 34`; поддержка кода своими силами. См. ADR-0005.
 
 Раздача локального контента в WebView по HTTPS-адресу вместо `file://` — рекомендованный Android подход: `file://` и `data:` дают «непрозрачный» origin и ломают same-origin. Официально рекомендован хост `appassets.androidplatform.net` через `WebViewAssetLoader` из AndroidX. AndroidX недоступен (нет Google Maven), поэтому тот же механизм реализован напрямую через `WebViewClient.shouldInterceptRequest` на хосте `app.opentweek.local`. Зона `.local` зарезервирована под mDNS и не разрешается в публичном DNS, поэтому запрос мимо перехватчика не уйдёт к постороннему серверу.
@@ -139,7 +139,8 @@ src/lib/ics.ts        экспорт VEVENT, разбор лент и импор
 src/lib/share.ts      #share=<deflate-raw base64url>
 src/lib/backup.ts     JSON-бэкап со вложениями в data URL
 src/i18n.ts           словари en/ru, t(), fmt(), fmtWeekday()
-src/native.ts         фасад платформы: saveFile, shareText, fetchText, напоминания, «назад»
+src/lib/quickadd.ts   разбор фраз голоса и «Поделиться»: день, время, повтор
+src/native.ts         фасад платформы: saveFile, shareText, fetchText, listen, onExternalIntent, напоминания, «назад»
 src/hooks/            живые запросы, фоновые эффекты, тосты
 ```
 
@@ -157,7 +158,9 @@ setReminders(json)                 → заменить расписание б�
 share(title, text)                 → системное «Поделиться»
 saveFile(name, mime, base64)       → системное «Сохранить как» (ACTION_CREATE_DOCUMENT)
 fetchText(id, url)                 → ответ через window.__otFetch(id, ok, text)
-takeLaunchTask()                   → "taskId|date" из уведомления, один раз
+takeIntent()                       → JSON внешнего события, один раз (см. 5.4)
+voiceAvailable()                   → есть ли приложение распознавания речи
+startVoice(lang, prompt)           → ответ через window.__otVoice(ok, text)
 minimize()                         → свернуть приложение
 ```
 
@@ -167,7 +170,8 @@ minimize()                         → свернуть приложение
 window.__otBack()          → true, если закрыт диалог; иначе оболочка сворачивает приложение
 window.__otNotifResult(b)  → результат запроса POST_NOTIFICATIONS
 window.__otFetch(id,ok,s)  → результат fetchText
-event "ot-open-task"       → пришёл тап по уведомлению при запущенном приложении
+window.__otVoice(ok, s)    → распознанная фраза; "" при отмене
+event "ot-intent"          → новое внешнее событие при запущенном приложении
 ```
 
 Пример расписания, которое страница передаёт в `setReminders`:
@@ -218,6 +222,42 @@ https://developer.android.com/about/versions/14/changes/schedule-exact-alarms
 
 `POST_NOTIFICATIONS` — runtime-разрешение с Android 13:  
 https://developer.android.com/develop/ui/views/notifications/notification-permission
+
+### 5.4. Внешние события и голос
+
+```text
+тап по уведомлению       → {"kind":"task","taskId":"…","date":"2026-09-29"}
+ярлык «Голосовая задача» → {"kind":"voice"}   action app.opentweek.action.VOICE
+ярлык «Новая задача»     → {"kind":"new"}     action app.opentweek.action.NEW
+«Поделиться» текстом     → {"kind":"text","text":"…"}  ACTION_SEND text/plain, AUTO_SEND
+```
+
+Конвейер голосовой задачи:
+
+```text
+кнопка микрофона | клавиша V | ярлык «Голосовая задача»
+→ listen(lang): Android — RecognizerIntent (сервис Google), браузер — SpeechRecognition
+→ parseQuickAdd(фраза, now): { title, date, reminder, rrule }
+→ addQuickTask(calendarId, parsed)
+→ переход к неделе задачи, тост «Добавлено: … — пн 28 сент., 09:00» с кнопкой «Открыть»
+```
+
+Что разбирает `parseQuickAdd` (ru и en в любой фразе):
+
+```text
+командные слова    «окей гугл, напомни мне», «добавь задачу», "remind me to", "add task"
+дни                сегодня, завтра, послезавтра, в/во/на <день недели>, через N дней, через неделю,
+                   5 октября, 15.09[.2027]; today, tomorrow, (on|next) <weekday>, Oct 12, 12 Oct, in N days
+время              в 9, в 9:30, в 7 вечера, в 3 дня, в полдень; at 6pm, 9:30am, noon; 18:30
+момент             через 30 минут, через 2 часа, через полчаса; in 2 hours, in 30 minutes
+повторы            каждый день, по будням, каждую неделю, каждые две недели, каждый <день недели>,
+                   каждый месяц, каждый год; daily, every weekday, weekly, every other week, every <weekday>
+```
+
+Правила разрешения: день недели без «каждый» — ближайший будущий, не сегодняшний; время без дня, которое уже прошло, — завтра; дата без года в прошлом — следующий год. Распознанные фрагменты вырезаются из заголовка. Предлоги в начале остаются: «к стоматологу».
+
+Команда «Окей Google, добавь задачу в opentweek» невозможна без App Actions, а их регистрирует только Google Play Console. См. ADR-0010.  
+https://developer.android.com/develop/devices/assistant/overview
 
 ## 6. Совместимость и версионирование
 
@@ -310,7 +350,7 @@ npm run build → dist/ → любой статический хостинг (Gi
 
 Матрица и обязательные проверки — в `32-test-plan.md`. Сейчас автоматизировано:
 
-- 20 модульных тестов (vitest + fake-indexeddb): повторы, ICS, шаринг, перемещения, перенумерация, i18n, расписание напоминаний;
+- 27 модульных тестов (vitest + fake-indexeddb): повторы, ICS, шаринг, перемещения, перенумерация, i18n, расписание напоминаний, разбор фраз;
 - 3 сквозных сценария Playwright в Chromium: десктоп en, мобильный ru с имитацией `OpenTweekNative`;
 - проверка APK: `apksigner verify`, `aapt dump badging`.
 
@@ -339,7 +379,8 @@ IndexedDB (Dexie)      — единственный источник правд�
 src/actions.ts         — все записи, покрыто тестами
 src/lib/recurrence.ts  — повторы: одна запись на серию, вычисление на лету
 src/native.ts          — единственная точка, знающая про платформу
-NativeBridge.java      — узкий мост: 9 методов, без eval и путей к файлам
+NativeBridge.java      — узкий мост: 11 методов, без eval и путей к файлам
+quickadd.ts            — голос и «Поделиться» в задачу, без облака
 Reminders.java         — будильники ОС, восстановление после перезагрузки
 android/build.sh       — сборка APK без Gradle за 3 с
 releases/              — подписанные APK с .sha256, канал распространения

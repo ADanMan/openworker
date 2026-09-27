@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { containerOf, dayContainer, moveItem } from './actions'
+import { addQuickTask, containerOf, dayContainer, moveItem } from './actions'
 import { BoardContext, type BoardState } from './board'
 import { ensureSeed, updateSettings } from './db'
 import { useFeedSync, useReminders, useRollover, useToday } from './hooks/background'
@@ -36,8 +36,11 @@ import { Toasts } from './components/Toasts'
 import { WeekView } from './components/WeekView'
 import type { ContainerId, FeedEvent, Item, Settings, Task } from './types'
 import { focusAddLine } from './ui'
-import { fmt, resolveLocale, setLocale, t } from './i18n'
-import { installBackButton, onReminderTap } from './native'
+import { fmt, fmtWeekday, getLocale, resolveLocale, setLocale, t } from './i18n'
+import { installBackButton, listen, onExternalIntent, voiceAvailable, type ExternalIntent } from './native'
+import { parseQuickAdd } from './lib/quickadd'
+import { describe as describeRule } from './lib/recurrence'
+import { toast } from './hooks/toast'
 
 type Panel = 'settings' | 'search' | 'shortcuts' | null
 
@@ -91,9 +94,55 @@ function Board({ settings }: { settings: Settings }) {
   const [shared, setShared] = useState<SharePayload | null>(null)
   const view = settings.view
 
+  const remindHintShown = useRef(false)
+  // Quick add from a spoken or shared phrase: "завтра в 9 позвонить маме".
+  const quickAdd = async (text: string) => {
+    if (!text.trim()) return
+    const parsed = parseQuickAdd(text)
+    const task = await addQuickTask(calendarId, parsed)
+    setAnchor(fromISODate(parsed.date))
+    const when = [
+      `${fmtWeekday(fromISODate(parsed.date))} ${fmt(fromISODate(parsed.date), 'd MMM')}`,
+      parsed.reminder,
+      parsed.rrule ? describeRule({ date: parsed.date, rrule: parsed.rrule }) : null,
+    ]
+      .filter(Boolean)
+      .join(', ')
+    toast(t('quickAdded', { title: parsed.title, when }), {
+      label: t('open'),
+      run: () => setOpenKey({ id: task.id, date: null }),
+    })
+    if (parsed.reminder && !settings.notifications && !remindHintShown.current) {
+      remindHintShown.current = true
+      toast(t('enableReminders'))
+    }
+  }
+
+  const canVoice = useMemo(() => voiceAvailable(), [])
+  const startVoice = async () => {
+    if (!canVoice) return
+    try {
+      await quickAdd(await listen(getLocale() === 'ru' ? 'ru-RU' : 'en-US', t('voicePrompt')))
+    } catch {
+      toast(t('voiceFailed'))
+    }
+  }
+
+  // Keep the latest handlers for listeners registered once.
+  const intentRef = useRef<(i: ExternalIntent) => void>(() => {})
+  useEffect(() => {
+    intentRef.current = (i) => {
+      if (i.kind === 'task') setOpenKey({ id: i.taskId, date: i.date })
+      else if (i.kind === 'voice') void startVoice()
+      else if (i.kind === 'new') {
+        setAnchor(new Date())
+        focusAddLine(dayContainer(today))
+      } else if (i.kind === 'text') void quickAdd(i.text)
+    }
+  })
   useEffect(() => {
     installBackButton()
-    return onReminderTap((id, date) => setOpenKey({ id, date }))
+    return onExternalIntent((i) => intentRef.current(i))
   }, [])
 
   useRollover(settings, today)
@@ -198,6 +247,7 @@ function Board({ settings }: { settings: Settings }) {
         s: () => updateSettings({ showSomeday: !settings.showSomeday }),
         p: () => window.print(),
         ',': () => setPanel('settings'),
+        v: () => intentRef.current({ kind: 'voice' }),
         '?': () => setPanel('shortcuts'),
       }
       const run = actions[e.key] ?? actions[e.key.toLowerCase()]
@@ -311,6 +361,11 @@ function Board({ settings }: { settings: Settings }) {
             </div>
           </nav>
           <div className="tools">
+            {canVoice && (
+              <button className="icon-btn" aria-label={t('voiceTask')} title={`${t('voiceTask')} (V)`} onClick={startVoice}>
+                <Icon name="mic" />
+              </button>
+            )}
             <button className="icon-btn" aria-label={t('search')} title={`${t('search')} (/)`} onClick={() => setPanel('search')}>
               <Icon name="search" />
             </button>

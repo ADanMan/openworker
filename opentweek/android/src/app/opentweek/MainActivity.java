@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.speech.RecognizerIntent;
 import android.util.Base64;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -19,7 +20,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+
+import org.json.JSONObject;
 
 /**
  * Hosts the web app in a WebView. Assets are served from the APK under a
@@ -32,11 +36,15 @@ public class MainActivity extends Activity {
     static final int REQ_FILE = 1;
     static final int REQ_SAVE = 2;
     static final int REQ_NOTIFICATIONS = 3;
+    static final int REQ_VOICE = 4;
+    static final String ACTION_VOICE = "app.opentweek.action.VOICE";
+    static final String ACTION_NEW = "app.opentweek.action.NEW";
 
     WebView web;
     private ValueCallback<Uri[]> fileCallback;
     private byte[] pendingSave;
-    String launchTask = "";
+    /** Pending external intent as JSON for the page (see NativeBridge.takeIntent); "" if none. */
+    String pendingIntent = "";
 
     @Override
     protected void onCreate(Bundle state) {
@@ -92,7 +100,8 @@ public class MainActivity extends Activity {
             }
         });
 
-        readLaunchTask(getIntent());
+        Shortcuts.install(this);
+        readIntent(getIntent());
         if (state != null) web.restoreState(state);
         else web.loadUrl(START_URL);
     }
@@ -106,14 +115,69 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (readLaunchTask(intent)) js("window.dispatchEvent(new Event('ot-open-task'))");
+        if (readIntent(intent)) js("window.dispatchEvent(new Event('ot-intent'))");
     }
 
-    private boolean readLaunchTask(Intent intent) {
-        if (intent == null || intent.getStringExtra("taskId") == null) return false;
-        String date = intent.getStringExtra("date");
-        launchTask = intent.getStringExtra("taskId") + "|" + (date == null ? "" : date);
-        return true;
+    /**
+     * Translate an incoming Intent into JSON for the page:
+     * reminder tap, launcher shortcut, or text shared from another app.
+     */
+    private boolean readIntent(Intent intent) {
+        if (intent == null) return false;
+        try {
+            JSONObject o = new JSONObject();
+            String action = intent.getAction();
+            if (intent.getStringExtra("taskId") != null) {
+                o.put("kind", "task");
+                o.put("taskId", intent.getStringExtra("taskId"));
+                o.put("date", intent.getStringExtra("date") == null ? "" : intent.getStringExtra("date"));
+            } else if (ACTION_VOICE.equals(action)) {
+                o.put("kind", "voice");
+            } else if (ACTION_NEW.equals(action)) {
+                o.put("kind", "new");
+            } else if (Intent.ACTION_SEND.equals(action) || "com.google.android.gm.action.AUTO_SEND".equals(action)) {
+                CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+                if (text == null || text.toString().trim().isEmpty()) return false;
+                String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+                String body = text.toString();
+                // Links shared from a browser come as "Title https://…": keep both.
+                if (subject != null && !body.contains(subject)) body = subject + " " + body;
+                o.put("kind", "text");
+                o.put("text", body.length() > 2000 ? body.substring(0, 2000) : body);
+            } else {
+                return false;
+            }
+            pendingIntent = o.toString();
+            // Consume it so a configuration change does not replay it.
+            setIntent(new Intent(this, MainActivity.class));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    void startVoice(final String lang, final String prompt) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                if (lang != null && !lang.isEmpty()) i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
+                if (prompt != null && !prompt.isEmpty()) i.putExtra(RecognizerIntent.EXTRA_PROMPT, prompt);
+                i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                try {
+                    startActivityForResult(i, REQ_VOICE);
+                } catch (Exception e) {
+                    js("window.__otVoice && window.__otVoice(false," + JSONObject.quote("unavailable") + ")");
+                }
+            }
+        });
+    }
+
+    boolean voiceAvailable() {
+        return !getPackageManager()
+                .queryIntentActivities(new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0)
+                .isEmpty();
     }
 
     private static final HashMap<String, String> MIME = new HashMap<String, String>();
@@ -212,7 +276,15 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
-        if (code == REQ_FILE) {
+        if (code == REQ_VOICE) {
+            String heard = "";
+            if (result == RESULT_OK && data != null) {
+                ArrayList<String> matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+                if (matches != null && !matches.isEmpty()) heard = matches.get(0);
+            }
+            // Cancelled or silent: resolve with "" so the page simply does nothing.
+            js("window.__otVoice && window.__otVoice(true," + JSONObject.quote(heard) + ")");
+        } else if (code == REQ_FILE) {
             if (fileCallback != null) {
                 fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
                 fileCallback = null;

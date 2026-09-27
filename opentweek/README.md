@@ -15,9 +15,9 @@ npm run build      # static PWA in dist/, host it anywhere
 
 ## Android app (APK)
 
-**Download:** [`releases/opentweek-1.0.0.apk`](releases/opentweek-1.0.0.apk) (Android 7+). Open the file on your phone and allow "Install unknown apps". New versions install over old ones and keep your data.
+**Download:** [`releases/opentweek-1.1.0.apk`](releases/opentweek-1.1.0.apk) (Android 7+). Open the file on your phone and allow "Install unknown apps". New versions install over old ones and keep your data.
 
-The Android app is a small native shell, not Capacitor or Gradle: an `Activity` with a `WebView` and a Java bridge, about 530 lines of Java (`android/src`). It builds in about 3 seconds from Ubuntu's archive packages, without Android Studio, Gradle or Google Maven:
+The Android app is a small native shell, not Capacitor or Gradle: an `Activity` with a `WebView` and a Java bridge, about 670 lines of Java (`android/src`). It builds in about 3 seconds from Ubuntu's archive packages, without Android Studio, Gradle or Google Maven:
 
 ```bash
 sudo apt-get install -y aapt dalvik-exchange zipalign apksigner android-sdk-platform-23 openjdk-21-jdk-headless
@@ -28,13 +28,16 @@ On top of the web version, the shell adds:
 
 - reminders scheduled with the OS `AlarmManager`. They fire when the app is closed, survive a reboot, and tapping one opens the task;
 - calendar subscriptions fetched natively, so Google Calendar ICS links work without a CORS proxy;
-- the system share sheet and "Save as" for exports and attachments, the file picker, and the back button.
+- the system share sheet and "Save as" for exports and attachments, the file picker, and the back button;
+- **voice tasks**: tap the mic or use the "Voice task" launcher shortcut and say "завтра в 9 позвонить маме" or "gym every monday at 7pm". The phrase becomes a task with its day, reminder time and repeat (`src/lib/quickadd.ts`, Russian and English). Text shared into the app is parsed the same way.
+
+"Hey Google, add a task to opentweek" is not possible for a sideloaded APK: Assistant App Actions are only registered for apps published through the Google Play Console (see ADR-0010). "Hey Google, open opentweek" plus the mic button, or the launcher shortcut, is the closest equivalent.
 
 The signing key `android/opentweek.keystore` is committed on purpose so that sideloaded updates keep installing over each other (see ADR-0006). Before distributing to anyone else, generate a private key and pass it via `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`.
 
 ## Documentation
 
-`docs/` is the project's ship pack: overview, PRD, MVP, roadmap, architecture, 9 ADRs, security, implementation plan, backlog, test plan, release notes, changelog, runbook and release checklist. Open [`docs/index.html`](docs/index.html) for a single navigable page.
+`docs/` is the project's ship pack: overview, PRD, MVP, roadmap, architecture, 10 ADRs, security, implementation plan, backlog, test plan, release notes, changelog, runbook and release checklist. Open [`docs/index.html`](docs/index.html) for a single navigable page.
 
 ## Features vs Tweek
 
@@ -64,6 +67,8 @@ The signing key `android/opentweek.keystore` is committed on purpose so that sid
 | Russian UI | ✓ | ✓ | ✓ |
 | Android app without an account | – | – | ✓ (APK, reminders work when the app is closed) |
 | Undo delete, JSON backup/restore | – | – | ✓ |
+| Voice input (natural language: day, time, repeat) | – | – | ✓ (mic, `V`, launcher shortcut) |
+| Share text from any app into a task | – | – | ✓ |
 | Real-time collaboration | ✓ | ✓ | roadmap |
 
 ## Architecture
