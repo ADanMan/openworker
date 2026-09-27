@@ -4,6 +4,7 @@ import { db } from '../db'
 import { isoAddDays, todayISO } from '../lib/dates'
 import { parseEvents } from '../lib/ics'
 import { expand } from '../lib/recurrence'
+import { isNative, syncNativeReminders } from '../native'
 import type { Feed, Settings, Task } from '../types'
 import { toast } from './toast'
 
@@ -47,8 +48,16 @@ export function useReminders(settings: Settings | undefined, tasks: Task[] | und
   useEffect(() => {
     tasksRef.current = tasks
   }, [tasks])
+  // Android: the OS fires scheduled reminders, even when the app is closed.
+  const enabled = !!settings?.notifications
   useEffect(() => {
-    if (!settings?.notifications || typeof Notification === 'undefined') return
+    if (!isNative || !tasks) return
+    const id = setTimeout(() => void syncNativeReminders(enabled ? tasks : []).catch(() => undefined), 800)
+    return () => clearTimeout(id)
+  }, [enabled, tasks, today])
+
+  useEffect(() => {
+    if (isNative || !settings?.notifications || typeof Notification === 'undefined') return
     const check = () => {
       if (Notification.permission !== 'granted' || !tasksRef.current) return
       const fired = loadFired()

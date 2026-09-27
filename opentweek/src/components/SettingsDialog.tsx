@@ -4,7 +4,8 @@ import { db, uid, updateSettings } from '../db'
 import { refreshFeed } from '../hooks/background'
 import { useCalendars, useFeeds } from '../hooks/data'
 import { toast } from '../hooks/toast'
-import { download, exportBackup, importBackup, type Backup } from '../lib/backup'
+import { exportBackup, importBackup, type Backup } from '../lib/backup'
+import { requestNotificationPermission, saveFile } from '../native'
 import { exportICS, parseTasks } from '../lib/ics'
 import { COLORS, type ColorKey, type Settings } from '../types'
 import { Dialog } from './Dialog'
@@ -132,9 +133,8 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             checked={settings.notifications}
             onChange={async (e) => {
               const on = e.target.checked
-              if (on && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
-                const p = await Notification.requestPermission()
-                if (p !== 'granted') return toast('Notifications are blocked in this browser')
+              if (on && !(await requestNotificationPermission())) {
+                return toast('Notifications are blocked: allow them in system settings')
               }
               await set({ notifications: on })
             }}
@@ -262,7 +262,7 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
           <button
             className="btn"
             onClick={async () =>
-              download(
+              saveFile(
                 `opentweek-backup-${new Date().toISOString().slice(0, 10)}.json`,
                 JSON.stringify(await exportBackup()),
                 'application/json',
@@ -290,7 +290,7 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             className="btn"
             onClick={async () => {
               const tasks = await db.tasks.where('calendarId').equals(settings.activeCalendarId).toArray()
-              download(`${active?.name ?? 'opentweek'}.ics`, exportICS(tasks, active?.name ?? 'opentweek'), 'text/calendar')
+              saveFile(`${active?.name ?? 'opentweek'}.ics`, exportICS(tasks, active?.name ?? 'opentweek'), 'text/calendar')
             }}
           >
             Export calendar (.ics)

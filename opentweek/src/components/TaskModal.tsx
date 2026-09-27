@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { detachOccurrence, duplicateTask, skipOccurrence, toggleDone, updateTask } from '../actions'
 import { uid } from '../db'
 import { toast } from '../hooks/toast'
-import { shareUrl, toShared } from '../lib/share'
+import { shareSummary, shareUrl, toShared } from '../lib/share'
+import { isNative, saveFile, shareText } from '../native'
 import { COLORS, type Item, type SomedayList, type Subtask } from '../types'
 import { Icon } from './Icon'
 import { RepeatEditor } from './RepeatEditor'
@@ -22,7 +23,15 @@ function AttachmentLink({ blob, name }: { blob: Blob; name: string }) {
       <img src={url} alt={name} className="thumb" />
     </a>
   ) : (
-    <a href={url} download={name}>
+    <a
+      href={url}
+      download={name}
+      onClick={(e) => {
+        if (!isNative) return
+        e.preventDefault()
+        void saveFile(name, blob, blob.type)
+      }}
+    >
       {name}
     </a>
   )
@@ -242,9 +251,12 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
           <button
             className="btn"
             onClick={async () => {
-              const url = await shareUrl({ v: 1, title: task.title, tasks: [toShared(task)] })
-              await navigator.clipboard?.writeText(url)
-              toast('Share link copied: the task lives only in the link')
+              const shared = toShared(task)
+              const url = await shareUrl({ v: 1, title: task.title, tasks: [shared] }, isNative)
+              // Browser: copy just the link. Android: share sheet with a readable summary (+ link if hosted).
+              const text = !isNative && url ? url : [shareSummary(shared), url].filter(Boolean).join('\n\n')
+              const how = await shareText(task.title, text)
+              if (how === 'copied') toast('Share link copied: the task lives only in the link')
             }}
           >
             <Icon name="share" size={14} /> Share

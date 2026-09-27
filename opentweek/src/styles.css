@@ -119,7 +119,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .spacer { flex: 1; }
 
 /* ---------- layout ---------- */
-.app { display: flex; flex-direction: column; height: 100%; }
+.app {
+  display: flex; flex-direction: column; height: 100%;
+  /* Android edge-to-edge / notches */
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
 .topbar {
   display: flex;
   align-items: center;

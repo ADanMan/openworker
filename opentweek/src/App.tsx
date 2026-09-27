@@ -37,6 +37,7 @@ import { Toasts } from './components/Toasts'
 import { WeekView } from './components/WeekView'
 import type { ContainerId, FeedEvent, Item, Settings, Task } from './types'
 import { focusAddLine } from './ui'
+import { installBackButton, onReminderTap } from './native'
 
 type Panel = 'settings' | 'search' | 'shortcuts' | null
 
@@ -87,6 +88,11 @@ function Board({ settings }: { settings: Settings }) {
   const [overContainer, setOverContainer] = useState<ContainerId | null>(null)
   const [shared, setShared] = useState<SharePayload | null>(null)
   const view = settings.view
+
+  useEffect(() => {
+    installBackButton()
+    return onReminderTap((id, date) => setOpenKey({ id, date }))
+  }, [])
 
   useRollover(settings, today)
   useReminders(settings, tasks, today)

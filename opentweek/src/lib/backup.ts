@@ -69,12 +69,3 @@ export async function importBackup(data: Backup) {
     await db.feeds.bulkAdd((data.feeds ?? []).map((f) => ({ ...f, events: [], fetchedAt: null, error: null })))
   })
 }
-
-export function download(filename: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}

@@ -50,6 +50,22 @@ export async function decodeShare(code: string): Promise<SharePayload> {
   return data
 }
 
-export async function shareUrl(payload: SharePayload) {
-  return `${location.origin}${location.pathname}#share=${await encodeShare(payload)}`
+/** Where the web version is hosted; share links point there. Empty = current page. */
+const PUBLIC_URL: string = import.meta.env.VITE_PUBLIC_URL ?? ''
+
+/** Null when there is no web address to link to (Android app without VITE_PUBLIC_URL). */
+export async function shareUrl(payload: SharePayload, native = false): Promise<string | null> {
+  const base = PUBLIC_URL || (native ? '' : `${location.origin}${location.pathname}`)
+  return base ? `${base}#share=${await encodeShare(payload)}` : null
+}
+
+export function shareSummary(t: SharedTask): string {
+  return [
+    t.title,
+    t.date ?? '',
+    t.note,
+    ...t.subtasks.map((s) => `${s.done ? '☑' : '☐'} ${s.title}`),
+  ]
+    .filter(Boolean)
+    .join('\n')
 }

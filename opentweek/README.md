@@ -12,6 +12,29 @@ npm test           # vitest: recurrence, ICS, share links, drag & drop logic
 npm run build      # static PWA in dist/, host it anywhere
 ```
 
+## Android app (APK)
+
+The web app is wrapped with [Capacitor](https://capacitorjs.com) 8 (`android/`). Every push that touches `opentweek/` builds a signed APK in GitHub Actions (`.github/workflows/opentweek-android.yml`) and publishes it as a pre-release named `opentweek 0.1.N (Android)`. It is also uploaded as a workflow artifact.
+
+To install it, open the release on your phone, download the `.apk` and allow "Install unknown apps" for your browser. New builds install over old ones and keep your data.
+
+What the Android build adds on top of the web version:
+
+- **Reminders fire even when the app is closed.** They are scheduled with the OS through `@capacitor/local-notifications`, using exact alarms. Tapping one opens the task.
+- The hardware back button closes the open dialog first, then leaves the app.
+- Backups, `.ics` exports, attachments and "Share" go through the system share sheet.
+
+Build locally (needs the Android SDK and JDK 21):
+
+```bash
+npm run build && npx cap sync android
+cd android && ./gradlew assembleRelease   # app/build/outputs/apk/release/
+```
+
+Signing uses `android/app/opentweek.keystore`, a fixed key committed on purpose so that sideloaded updates keep installing over each other. Before publishing to Google Play, generate a private key and pass it via `KEYSTORE_FILE` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`.
+
+Set `VITE_PUBLIC_URL` to where the web version is hosted so share links from the app point there. Without it, the app shares a plain-text summary of the task.
+
 ## Features vs Tweek
 
 | Feature | Tweek Free | Tweek Premium | opentweek |
