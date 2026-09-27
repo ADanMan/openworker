@@ -102,9 +102,11 @@ export type WeekendLayout = 'compact' | 'full' | 'hidden'
 export type Theme = 'system' | 'light' | 'dark'
 export type Paper = 'lined' | 'plain' | 'dotted'
 export type View = 'week' | 'month'
+export type Language = 'auto' | 'en' | 'ru'
 
 export interface Settings {
   activeCalendarId: string
+  language: Language
   weekStartsOn: 0 | 1 | 6
   weekendLayout: WeekendLayout
   theme: Theme

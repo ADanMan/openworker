@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_reminders">Напоминания</string>
+    <string name="saved">Сохранено</string>
+    <string name="save_failed">Не удалось сохранить файл</string>
+    <string name="share">Поделиться</string>
+</resources>

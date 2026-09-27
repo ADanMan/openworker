@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { fmt, fmtWeekday, t } from '../i18n'
 import { dayContainer } from '../actions'
 import { useBoard } from '../board'
 import { fromISODate, isWeekend, weekNumber } from '../lib/dates'
@@ -16,14 +16,14 @@ export function MonthView({ weeks, month }: { weeks: string[][]; month: number }
           .filter((d) => !hideWeekend || !isWeekend(d))
           .map((d) => (
             <span key={d} className="month-dow">
-              {format(fromISODate(d), 'EEE')}
+              {fmtWeekday(fromISODate(d))}
             </span>
           ))}
       </div>
       {weeks.map((week) => (
         <div className="month-row" key={week[0]}>
           {settings.showWeekNumbers && (
-            <button className="wk" onClick={() => goToDate(week[0], 'week')} title="Open week">
+            <button className="wk" onClick={() => goToDate(week[0], 'week')} title={t('openWeek')}>
               {weekNumber(week[3])}
             </button>
           )}
@@ -39,7 +39,7 @@ export function MonthView({ weeks, month }: { weeks: string[][]; month: number }
                   className={`cell${d === today ? ' is-today' : ''}${date.getMonth() !== month ? ' other-month' : ''}`}
                   header={
                     <header className={`cell-header${d === today ? ' today' : ''}`}>
-                      <button onClick={() => goToDate(d, 'week')}>{format(date, 'd')}</button>
+                      <button onClick={() => goToDate(d, 'week')}>{fmt(date, 'd')}</button>
                     </header>
                   }
                 />

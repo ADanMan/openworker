@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useState, type ReactNode } from 'react'
@@ -23,7 +24,7 @@ function AddLine({ container }: { container: ContainerId }) {
         className="add-line"
         data-add={container}
         value={value}
-        aria-label="Add task"
+        aria-label={t('addTask')}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') void submit()

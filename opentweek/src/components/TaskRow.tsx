@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useState, type KeyboardEvent } from 'react'
@@ -57,7 +58,7 @@ export function TaskRow({ item, container }: { item: Item; container: ContainerI
     >
       <button
         className="check"
-        aria-label={item.done ? 'Mark as not done' : 'Mark as done'}
+        aria-label={item.done ? t('markNotDone') : t('markDone')}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={() => toggleDone(item)}
       >
@@ -98,7 +99,7 @@ export function TaskRow({ item, container }: { item: Item; container: ContainerI
       {!editing && (
         <button
           className="more"
-          aria-label="Open task details"
+          aria-label={t('openDetails')}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => openItem(item)}
         >

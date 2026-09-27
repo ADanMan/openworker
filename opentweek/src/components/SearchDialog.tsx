@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { fmt, t } from '../i18n'
 import { useMemo, useState } from 'react'
 import { fromISODate } from '../lib/dates'
 import { describe } from '../lib/recurrence'
@@ -21,31 +21,31 @@ export function SearchDialog({
     const needle = q.trim().toLowerCase()
     if (!needle) return []
     return tasks
-      .filter((t) =>
-        [t.title, t.note, ...t.subtasks.map((s) => s.title)].some((s) => s.toLowerCase().includes(needle)),
+      .filter((task) =>
+        [task.title, task.note, ...task.subtasks.map((s) => s.title)].some((s) => s.toLowerCase().includes(needle)),
       )
       .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
       .slice(0, 100)
   }, [q, tasks])
 
   return (
-    <Dialog title="Search" onClose={onClose} className="search">
-      <input autoFocus className="search-input" placeholder="Search tasks, notes, subtasks…" value={q} onChange={(e) => setQ(e.target.value)} />
+    <Dialog title={t('search')} onClose={onClose} className="search">
+      <input autoFocus className="search-input" placeholder={t('searchPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} />
       <ul className="results">
-        {results.map((t) => (
-          <li key={t.id}>
-            <button onClick={() => onPick(t)} className={t.done ? 'done' : ''}>
-              <span className={`dot color-${t.color}`} />
-              <span className="title">{t.title || '(untitled)'}</span>
+        {results.map((task) => (
+          <li key={task.id}>
+            <button onClick={() => onPick(task)} className={task.done ? 'done' : ''}>
+              <span className={`dot color-${task.color}`} />
+              <span className="title">{task.title || t('untitled')}</span>
               <span className="muted small">
-                {t.date
-                  ? format(fromISODate(t.date), 'EEE d MMM yyyy') + (t.rrule ? ` · ${describe(t)}` : '')
-                  : `Someday · ${lists.find((l) => l.id === t.listId)?.name ?? ''}`}
+                {task.date
+                  ? fmt(fromISODate(task.date), 'EEE d MMM yyyy') + (task.rrule ? ` · ${describe(task)}` : '')
+                  : `${t('someday')} · ${lists.find((l) => l.id === task.listId)?.name ?? ''}`}
               </span>
             </button>
           </li>
         ))}
-        {q && !results.length && <li className="muted">Nothing found</li>}
+        {q && !results.length && <li className="muted">{t('nothingFound')}</li>}
       </ul>
     </Dialog>
   )

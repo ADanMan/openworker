@@ -1,16 +1,34 @@
-import { App } from '@capacitor/app'
-import { Capacitor } from '@capacitor/core'
-import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
-import { LocalNotifications } from '@capacitor/local-notifications'
-import { Share } from '@capacitor/share'
-import { isoAddDays, todayISO } from './lib/dates'
+import { isoAddDays, toISODate } from './lib/dates'
 import { expand } from './lib/recurrence'
 import type { Task } from './types'
 
-/** True inside the Android (Capacitor) app, false in the browser/PWA. */
-export const isNative = Capacitor.isNativePlatform()
+/** `window.OpenTweekNative`, injected by the Android shell (android/src/app/opentweek/NativeBridge.java). */
+interface NativeBridge {
+  platform(): string
+  notificationsAllowed(): boolean
+  requestNotifications(): void
+  setReminders(json: string): void
+  share(title: string, text: string): void
+  saveFile(name: string, mime: string, base64: string): void
+  takeLaunchTask(): string
+  minimize(): void
+  fetchText(id: number, url: string): void
+}
 
-/** Save a text file: a download in the browser, the system share sheet on Android. */
+declare global {
+  interface Window {
+    OpenTweekNative?: NativeBridge
+    __otBack?: () => boolean
+    __otNotifResult?: (granted: boolean) => void
+    __otFetch?: (id: number, ok: boolean, text: string) => void
+  }
+}
+
+const bridge = typeof window !== 'undefined' ? window.OpenTweekNative : undefined
+
+/** True inside the Android app, false in the browser/PWA. */
+export const isNative = !!bridge
+
 const blobToBase64 = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
     const r = new FileReader()
@@ -19,28 +37,25 @@ const blobToBase64 = (blob: Blob) =>
     r.readAsDataURL(blob)
   })
 
+/** Save a file: a download in the browser, the system "Save as" picker on Android. */
 export async function saveFile(filename: string, content: string | Blob, type: string) {
-  if (!isNative) {
-    const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  const blob = content instanceof Blob ? content : new Blob([content], { type })
+  if (bridge) {
+    bridge.saveFile(filename, type || blob.type, await blobToBase64(blob))
     return
   }
-  const { uri } = await Filesystem.writeFile(
-    content instanceof Blob
-      ? { path: filename, data: await blobToBase64(content), directory: Directory.Cache }
-      : { path: filename, data: content, directory: Directory.Cache, encoding: Encoding.UTF8 },
-  )
-  await Share.share({ title: filename, files: [uri] })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/** Share text/URL: system share sheet on Android, clipboard in the browser. */
+/** Share text: system share sheet on Android, clipboard in the browser. */
 export async function shareText(title: string, text: string): Promise<'shared' | 'copied'> {
-  if (isNative) {
-    await Share.share({ title, text })
+  if (bridge) {
+    bridge.share(title, text)
     return 'shared'
   }
   await navigator.clipboard?.writeText(text)
@@ -48,74 +63,110 @@ export async function shareText(title: string, text: string): Promise<'shared' |
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (!isNative) {
-    if (typeof Notification === 'undefined') return false
-    return Notification.permission === 'granted' || (await Notification.requestPermission()) === 'granted'
+  if (bridge) {
+    if (bridge.notificationsAllowed()) return true
+    return new Promise((resolve) => {
+      window.__otNotifResult = (granted) => {
+        window.__otNotifResult = undefined
+        resolve(granted)
+      }
+      bridge.requestNotifications()
+    })
   }
-  const { display } = await LocalNotifications.requestPermissions()
-  return display === 'granted'
+  if (typeof Notification === 'undefined') return false
+  return Notification.permission === 'granted' || (await Notification.requestPermission()) === 'granted'
 }
 
-// Notification ids must be 32-bit ints; derive a stable one from the occurrence key.
-const hashId = (s: string) => {
+// Alarm ids must be 32-bit ints; derive a stable one from the occurrence key.
+export const hashId = (s: string) => {
   let h = 0
   for (const ch of s) h = (Math.imul(31, h) + ch.charCodeAt(0)) | 0
   return Math.abs(h) || 1
 }
 
-const MAX_SCHEDULED = 60
-const HORIZON_DAYS = 21
+const MAX_SCHEDULED = 100
+const HORIZON_DAYS = 30
 
-/**
- * Android: hand upcoming reminders to the OS so they fire even when the app is
- * closed. Re-run whenever tasks change; it replaces the previous schedule.
- */
-export async function syncNativeReminders(tasks: Task[]) {
-  if (!isNative) return
-  const today = todayISO()
-  const now = Date.now()
-  const upcoming = expand(tasks, today, isoAddDays(today, HORIZON_DAYS))
+export interface ScheduledReminder {
+  id: number
+  at: number
+  title: string
+  body: string
+  taskId: string
+  date: string
+}
+
+/** Upcoming reminders (next 30 days, at most 100) in the shape the Android shell schedules. */
+export function upcomingReminders(tasks: Task[], now = new Date()): ScheduledReminder[] {
+  const today = toISODate(now)
+  return expand(tasks, today, isoAddDays(today, HORIZON_DAYS))
     .filter((i) => i.task.reminder && i.date && !i.done)
     .map((i) => {
       const [h, m] = i.task.reminder!.split(':').map(Number)
       const [y, mo, d] = i.date!.split('-').map(Number)
-      return { item: i, at: new Date(y, mo - 1, d, h, m) }
+      return {
+        id: hashId(i.key),
+        at: new Date(y, mo - 1, d, h, m).getTime(),
+        title: i.task.title || 'Reminder',
+        body: i.task.reminder!,
+        taskId: i.task.id,
+        date: i.occurrence ? i.date! : '',
+      }
     })
-    .filter((r) => r.at.getTime() > now)
-    .sort((a, b) => a.at.getTime() - b.at.getTime())
+    .filter((r) => r.at > now.getTime())
+    .sort((a, b) => a.at - b.at)
     .slice(0, MAX_SCHEDULED)
-
-  const pending = await LocalNotifications.getPending()
-  if (pending.notifications.length) await LocalNotifications.cancel({ notifications: pending.notifications })
-  if (!upcoming.length) return
-  await LocalNotifications.schedule({
-    notifications: upcoming.map(({ item, at }) => ({
-      id: hashId(item.key),
-      title: item.task.title || 'Reminder',
-      body: `${item.task.reminder} · opentweek`,
-      schedule: { at, allowWhileIdle: true },
-      extra: { taskId: item.task.id, date: item.occurrence ? item.date : null },
-    })),
-  })
 }
 
-/** Android back button: close the top dialog if any, otherwise leave the app. */
+/** Android: hand the reminder schedule to the OS so it fires while the app is closed. */
+export function syncNativeReminders(tasks: Task[]) {
+  bridge?.setReminders(JSON.stringify(upcomingReminders(tasks)))
+}
+
+/** Android back button: close the top dialog if any; the shell leaves the app otherwise. */
 export function installBackButton() {
-  if (!isNative) return
-  void App.addListener('backButton', () => {
+  if (!bridge) return
+  window.__otBack = () => {
     const dialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]')
     const top = dialogs[dialogs.length - 1]
-    if (top) top.close()
-    else void App.minimizeApp()
-  })
+    if (!top) return false
+    top.close()
+    return true
+  }
 }
 
-/** Tapping a reminder opens its task. */
+/** Tapping a reminder notification opens its task. */
 export function onReminderTap(open: (taskId: string, date: string | null) => void) {
-  if (!isNative) return () => {}
-  const handle = LocalNotifications.addListener('localNotificationActionPerformed', (e) => {
-    const extra = e.notification.extra as { taskId?: string; date?: string | null } | undefined
-    if (extra?.taskId) open(extra.taskId, extra.date ?? null)
+  if (!bridge) return () => {}
+  const take = () => {
+    const [id, date] = bridge.takeLaunchTask().split('|')
+    if (id) open(id, date || null)
+  }
+  take()
+  window.addEventListener('ot-open-task', take)
+  return () => window.removeEventListener('ot-open-task', take)
+}
+
+const pendingFetches = new Map<number, { resolve: (text: string) => void; reject: (e: Error) => void }>()
+let fetchSeq = 0
+
+/** GET text. On Android it goes through the native side, which is not subject to CORS. */
+export function fetchText(url: string): Promise<string> {
+  if (!bridge) {
+    return fetch(url).then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.text()
+    })
+  }
+  window.__otFetch ??= (id, ok, text) => {
+    const p = pendingFetches.get(id)
+    pendingFetches.delete(id)
+    if (ok) p?.resolve(text)
+    else p?.reject(new Error(text))
+  }
+  const id = ++fetchSeq
+  return new Promise((resolve, reject) => {
+    pendingFetches.set(id, { resolve, reject })
+    bridge.fetchText(id, url)
   })
-  return () => void handle.then((h) => h.remove())
 }

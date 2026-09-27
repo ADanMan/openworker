@@ -125,14 +125,40 @@ export async function moveItem(item: Item, target: ContainerId, index: number, t
   const rows = targetItems.filter((i) => i.key !== item.key)
   const at = Math.max(0, Math.min(index, rows.length))
   const ordered = [...rows.slice(0, at).map((i) => i.task.id), movedId, ...rows.slice(at).map((i) => i.task.id)]
-  const fixed = new Set(targetItems.filter((i) => i.occurrence && i.key !== item.key).map((i) => i.task.id))
+  const fixedOrder = new Map(
+    targetItems.filter((i) => i.occurrence && i.key !== item.key).map((i) => [i.task.id, i.task.order]),
+  )
+  const orders = interleaveOrders(ordered.map((id) => fixedOrder.get(id) ?? null))
   await db.transaction('rw', db.tasks, async () => {
-    let order = 0
-    for (const id of ordered) {
-      if (fixed.has(id)) continue
-      await db.tasks.update(id, { order: ++order })
-    }
+    await Promise.all(ordered.map((id, i) => (fixedOrder.has(id) ? null : db.tasks.update(id, { order: orders[i] }))))
   })
+}
+
+/**
+ * Given a display sequence where some slots have a fixed order value (repeating
+ * series) and the rest are free (null), assign free slots values that keep the
+ * sequence strictly increasing without touching the fixed ones.
+ */
+export function interleaveOrders(slots: (number | null)[]): number[] {
+  const out = [...slots] as number[]
+  let i = 0
+  while (i < slots.length) {
+    if (slots[i] !== null) {
+      i++
+      continue
+    }
+    let j = i
+    while (j < slots.length && slots[j] === null) j++
+    const k = j - i
+    let lo = i > 0 ? out[i - 1] : null
+    let hi = j < slots.length ? (slots[j] as number) : null
+    if (lo === null && hi === null) [lo, hi] = [0, k + 1]
+    else if (lo === null) lo = hi! - (k + 1)
+    else if (hi === null) hi = lo + (k + 1)
+    for (let n = 0; n < k; n++) out[i + n] = lo + ((hi! - lo) * (n + 1)) / (k + 1)
+    i = j
+  }
+  return out
 }
 
 /** Move a task to another day, keeping it at the end of that day. */

@@ -1,27 +1,28 @@
+import { t, type Key } from '../i18n'
 import { Dialog } from './Dialog'
 
-const SHORTCUTS: [string, string][] = [
-  ['← / →', 'Previous / next week (or month)'],
-  ['T', 'Jump to today'],
-  ['W / M', 'Week view / month view'],
-  ['N', 'New task today'],
-  ['/ or Ctrl+K', 'Search'],
-  ['H', 'Hide / show completed tasks'],
-  ['S', 'Show / hide Someday lists'],
-  ['P', 'Print'],
-  [',', 'Settings'],
-  ['?', 'This help'],
-  ['Tab', 'Move focus between tasks'],
-  ['Enter', 'Edit focused task'],
-  ['E / O', 'Open focused task details'],
-  ['X / D', 'Toggle focused task done'],
-  ['Delete', 'Delete focused task (undo available)'],
-  ['Space, arrows, Space', 'Pick up, move, drop focused task'],
+const SHORTCUTS: [string, Key][] = [
+  ['← / →', 'kPrevNext'],
+  ['T', 'kToday'],
+  ['W / M', 'kView'],
+  ['N', 'kNew'],
+  ['/ · Ctrl+K', 'kSearch'],
+  ['H', 'kHide'],
+  ['S', 'kSomeday'],
+  ['P', 'kPrint'],
+  [',', 'kSettings'],
+  ['?', 'kHelp'],
+  ['Tab', 'kTab'],
+  ['Enter', 'kEdit'],
+  ['E / O', 'kOpen'],
+  ['X / D', 'kDone'],
+  ['Delete', 'kDelete'],
+  ['Space, ←↑→↓, Space', 'kDrag'],
 ]
 
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   return (
-    <Dialog title="Keyboard shortcuts" onClose={onClose}>
+    <Dialog title={t('shortcuts')} onClose={onClose}>
       <table className="shortcuts">
         <tbody>
           {SHORTCUTS.map(([k, v]) => (
@@ -29,7 +30,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
               <td>
                 <kbd>{k}</kbd>
               </td>
-              <td>{v}</td>
+              <td>{t(v)}</td>
             </tr>
           ))}
         </tbody>

@@ -62,3 +62,28 @@ describe('actions', () => {
     expect((await db.tasks.toArray()).find((t) => t.title === 'late')!.date).toBe('2026-09-27')
   })
 })
+
+describe('interleaveOrders', () => {
+  it('keeps fixed slots and makes the sequence increasing', async () => {
+    const { interleaveOrders } = await import('../actions')
+    expect(interleaveOrders([null, null])).toEqual([1, 2])
+    expect(interleaveOrders([5, null])).toEqual([5, 6])
+    expect(interleaveOrders([null, 5])).toEqual([4, 5])
+    const r = interleaveOrders([null, 2, null, null, 3, null])
+    expect(r[1]).toBe(2)
+    expect(r[4]).toBe(3)
+    for (let i = 1; i < r.length; i++) expect(r[i]).toBeGreaterThan(r[i - 1])
+  })
+
+  it('places a task dropped after a repeating occurrence below it', async () => {
+    const mon = dayContainer('2026-09-21')
+    const gym = await addTask('c', mon, 'gym')
+    await db.tasks.update(gym.id, { rrule: presetRule('daily', '2026-09-21'), order: 7 })
+    await addTask('c', dayContainer('2026-09-22'), 'call')
+    const tue = dayContainer('2026-09-22')
+    const call = (await rows(tue)).find((i) => i.task.title === 'call')!
+    const wed = dayContainer('2026-09-23')
+    await moveItem(call, wed, 1, await rows(wed))
+    expect((await rows(wed)).map((i) => i.task.title)).toEqual(['gym', 'call'])
+  })
+})

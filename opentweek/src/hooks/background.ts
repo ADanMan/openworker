@@ -1,10 +1,11 @@
+import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { rollover } from '../actions'
 import { db } from '../db'
 import { isoAddDays, todayISO } from '../lib/dates'
 import { parseEvents } from '../lib/ics'
 import { expand } from '../lib/recurrence'
-import { isNative, syncNativeReminders } from '../native'
+import { fetchText, isNative, syncNativeReminders } from '../native'
 import type { Feed, Settings, Task } from '../types'
 import { toast } from './toast'
 
@@ -22,7 +23,7 @@ export function useRollover(settings: Settings | undefined, today: string) {
   useEffect(() => {
     if (!settings?.autoRollover || !settings.activeCalendarId) return
     rollover(settings.activeCalendarId, today).then((n) => {
-      if (n) toast(`Moved ${n} unfinished task${n > 1 ? 's' : ''} to today`)
+      if (n) toast(t('movedToToday', { n }))
     })
   }, [settings?.autoRollover, settings?.activeCalendarId, today])
 }
@@ -52,7 +53,7 @@ export function useReminders(settings: Settings | undefined, tasks: Task[] | und
   const enabled = !!settings?.notifications
   useEffect(() => {
     if (!isNative || !tasks) return
-    const id = setTimeout(() => void syncNativeReminders(enabled ? tasks : []).catch(() => undefined), 800)
+    const id = setTimeout(() => syncNativeReminders(enabled ? tasks : []), 800)
     return () => clearTimeout(id)
   }, [enabled, tasks, today])
 
@@ -81,15 +82,15 @@ export function useReminders(settings: Settings | undefined, tasks: Task[] | und
 
 export async function refreshFeed(feed: Feed, corsProxy: string) {
   const url = feed.url.replace(/^webcal:/i, 'https:')
-  const target = corsProxy ? corsProxy.replace('{url}', encodeURIComponent(url)) : url
+  // The Android app fetches natively (no CORS), so the proxy is only for the browser.
+  const target = corsProxy && !isNative ? corsProxy.replace('{url}', encodeURIComponent(url)) : url
   try {
-    const res = await fetch(target)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const text = await fetchText(target)
     const today = todayISO()
-    const events = parseEvents(await res.text(), isoAddDays(today, -120), isoAddDays(today, 400))
+    const events = parseEvents(text, isoAddDays(today, -120), isoAddDays(today, 400))
     await db.feeds.update(feed.id, { events, fetchedAt: Date.now(), error: null })
   } catch (e) {
-    const message = e instanceof TypeError ? 'Network/CORS error: set a CORS proxy in settings' : String(e)
+    const message = e instanceof TypeError ? t('corsError') : String(e)
     await db.feeds.update(feed.id, { error: message, fetchedAt: Date.now() })
   }
 }

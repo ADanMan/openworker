@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useState } from 'react'
 import { addList, deleteList, listContainer } from '../actions'
 import { useBoard } from '../board'
@@ -26,16 +27,16 @@ function ListHeader({ list }: { list: SomedayList }) {
           }}
         />
       ) : (
-        <h3 onDoubleClick={() => setEditing(true)} title="Double-click to rename">
+        <h3 onDoubleClick={() => setEditing(true)} title={t('renameHint')}>
           {list.name}
         </h3>
       )}
       <button
         className="icon-btn subtle"
-        aria-label={`Delete list ${list.name}`}
+        aria-label={t('deleteList', { name: list.name })}
         onClick={() => {
           const n = items(listContainer(list.id)).length
-          if (!n || confirm(`Delete "${list.name}" and its ${n} task(s)?`)) void deleteList(list.id)
+          if (!n || confirm(t('confirmDeleteList', { name: list.name, n }))) void deleteList(list.id)
         }}
       >
         <Icon name="trash" size={14} />
@@ -51,8 +52,8 @@ export function SomedayPanel({ lists }: { lists: SomedayList[] }) {
       {lists.map((list) => (
         <Column key={list.id} container={listContainer(list.id)} className="list" header={<ListHeader list={list} />} />
       ))}
-      <button className="add-list" onClick={() => addList(calendarId)}>
-        <Icon name="plus" size={16} /> New list
+      <button className="add-list" onClick={() => addList(calendarId, t('newList'))}>
+        <Icon name="plus" size={16} /> {t('newList')}
       </button>
     </div>
   )

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { newTask } from '../actions'
 import { db, uid } from '../db'
 import { toast } from '../hooks/toast'
@@ -14,45 +15,45 @@ export function ShareImportDialog({
   onClose: () => void
 }) {
   return (
-    <Dialog title="Shared with you" onClose={onClose}>
+    <Dialog title={t('sharedWithYou')} onClose={onClose}>
       <ul className="results">
-        {payload.tasks.map((t, i) => (
+        {payload.tasks.map((task, i) => (
           <li key={i}>
-            <span className={`dot color-${t.color}`} /> <strong>{t.title}</strong>{' '}
-            <span className="muted small">{t.date ?? 'Someday'}</span>
-            {t.note && <p className="muted small pre">{t.note}</p>}
+            <span className={`dot color-${task.color}`} /> <strong>{task.title}</strong>{' '}
+            <span className="muted small">{task.date ?? t('someday')}</span>
+            {task.note && <p className="muted small pre">{task.note}</p>}
           </li>
         ))}
       </ul>
       <div className="modal-actions">
         <span className="spacer" />
         <button className="btn" onClick={onClose}>
-          Dismiss
+          {t('dismiss')}
         </button>
         <button
           className="btn primary"
           onClick={async () => {
             const firstList = (await db.lists.where('calendarId').equals(calendarId).sortBy('order'))[0]
             await db.tasks.bulkAdd(
-              payload.tasks.map((t, i) =>
+              payload.tasks.map((task, i) =>
                 newTask({
                   calendarId,
-                  title: t.title,
-                  note: t.note,
-                  color: t.color,
-                  date: t.date,
-                  listId: t.date ? null : (firstList?.id ?? null),
-                  rrule: t.date ? t.rrule : null,
-                  subtasks: t.subtasks.map((s) => ({ ...s, id: uid() })),
+                  title: task.title,
+                  note: task.note,
+                  color: task.color,
+                  date: task.date,
+                  listId: task.date ? null : (firstList?.id ?? null),
+                  rrule: task.date ? task.rrule : null,
+                  subtasks: task.subtasks.map((s) => ({ ...s, id: uid() })),
                   order: Date.now() + i,
                 }),
               ),
             )
-            toast(`Added ${payload.tasks.length} task(s)`)
+            toast(t('added', { n: payload.tasks.length }))
             onClose()
           }}
         >
-          Add to my calendar
+          {t('addToCalendar')}
         </button>
       </div>
     </Dialog>

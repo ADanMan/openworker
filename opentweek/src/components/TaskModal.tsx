@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { detachOccurrence, duplicateTask, skipOccurrence, toggleDone, updateTask } from '../actions'
 import { uid } from '../db'
@@ -61,7 +62,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
         <div className="modal-top">
           <button
             className={`check big${item.done ? ' on' : ''}`}
-            aria-label="Toggle done"
+            aria-label={t('toggleDone')}
             onClick={() => toggleDone({ ...item, done: item.done })}
           >
             {item.done && <Icon name="check" size={14} />}
@@ -70,25 +71,25 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
             className="title-input"
             defaultValue={task.title}
             key={task.id}
-            placeholder="Task"
+            placeholder={t('task')}
             onChange={(e) => set({ title: e.target.value })}
           />
-          <button className="icon-btn" aria-label="Close" onClick={() => dialog.current?.close()}>
+          <button className="icon-btn" aria-label={t('close')} onClick={() => dialog.current?.close()}>
             <Icon name="close" />
           </button>
         </div>
 
         {item.occurrence && (
           <div className="banner">
-            <Icon name="repeat" size={14} /> Repeating task: edits apply to every occurrence.
+            <Icon name="repeat" size={14} /> {t('repeatingBanner')}
             <span className="banner-actions">
-              <button onClick={() => skipOccurrence(item).then(() => dialog.current?.close())}>Skip this one</button>
+              <button onClick={() => skipOccurrence(item).then(() => dialog.current?.close())}>{t('skipThis')}</button>
               <button
                 onClick={() =>
                   detachOccurrence(item, { date: item.date, listId: null }).then(() => dialog.current?.close())
                 }
               >
-                Edit only this one
+                {t('editOnlyThis')}
               </button>
             </span>
           </div>
@@ -96,7 +97,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
 
         <div className="field-row">
           <label className="field">
-            <span>When</span>
+            <span>{t('when')}</span>
             <select
               value={where}
               onChange={(e) => {
@@ -105,10 +106,10 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
                 else set({ date: null, listId: v.slice(5), rrule: null, reminder: null })
               }}
             >
-              <option value="day">On a day</option>
+              <option value="day">{t('onADay')}</option>
               {lists.map((l) => (
                 <option key={l.id} value={`list:${l.id}`}>
-                  Someday: {l.name}
+                  {t('somedayList', { name: l.name })}
                 </option>
               ))}
             </select>
@@ -117,12 +118,12 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
                 type="date"
                 value={item.occurrence ? task.date : (task.date ?? '')}
                 onChange={(e) => e.target.value && set({ date: e.target.value })}
-                title={item.occurrence ? 'Series start date' : undefined}
+                title={item.occurrence ? t('seriesStart') : undefined}
               />
             )}
           </label>
           <label className="field">
-            <span>Reminder</span>
+            <span>{t('reminder')}</span>
             <input
               type="time"
               disabled={!task.date}
@@ -133,7 +134,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
         </div>
 
         <div className="field">
-          <span>Color</span>
+          <span>{t('color')}</span>
           <div className="swatches">
             {COLORS.map((c) => (
               <button
@@ -147,7 +148,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
         </div>
 
         <div className="field">
-          <span>Repeat</span>
+          <span>{t('repeat')}</span>
           <RepeatEditor
             date={task.date}
             rrule={task.rrule}
@@ -156,13 +157,13 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
         </div>
 
         <div className="field">
-          <span>Subtasks</span>
+          <span>{t('subtasks')}</span>
           <ul className="subtasks">
             {task.subtasks.map((s) => (
               <li key={s.id} className={s.done ? 'done' : ''}>
                 <button
                   className={`check${s.done ? ' on' : ''}`}
-                  aria-label="Toggle subtask"
+                  aria-label={t('toggleSubtask')}
                   onClick={() => setSubtasks(task.subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))}
                 >
                   {s.done && <Icon name="check" size={12} />}
@@ -175,7 +176,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
                 />
                 <button
                   className="icon-btn subtle"
-                  aria-label="Remove subtask"
+                  aria-label={t('removeSubtask')}
                   onClick={() => setSubtasks(task.subtasks.filter((x) => x.id !== s.id))}
                 >
                   <Icon name="close" size={14} />
@@ -185,7 +186,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
             <li>
               <span className="check placeholder" />
               <input
-                placeholder="Add subtask"
+                placeholder={t('addSubtask')}
                 value={newSub}
                 onChange={(e) => setNewSub(e.target.value)}
                 onKeyDown={(e) => {
@@ -200,18 +201,18 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
         </div>
 
         <label className="field">
-          <span>Notes</span>
+          <span>{t('notes')}</span>
           <textarea
             key={task.id}
             defaultValue={task.note}
             rows={4}
-            placeholder="Add a note…"
+            placeholder={t('addNote')}
             onChange={(e) => set({ note: e.target.value })}
           />
         </label>
 
         <div className="field">
-          <span>Attachments</span>
+          <span>{t('attachments')}</span>
           <ul className="attachments">
             {task.attachments.map((a) => (
               <li key={a.id}>
@@ -219,7 +220,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
                 <span className="muted small">{fmtSize(a.size)}</span>
                 <button
                   className="icon-btn subtle"
-                  aria-label="Remove attachment"
+                  aria-label={t('removeAttachment')}
                   onClick={() => set({ attachments: task.attachments.filter((x) => x.id !== a.id) })}
                 >
                   <Icon name="close" size={14} />
@@ -228,7 +229,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
             ))}
           </ul>
           <label className="btn file-btn">
-            <Icon name="clip" size={14} /> Attach files
+            <Icon name="clip" size={14} /> {t('attachFiles')}
             <input
               type="file"
               multiple
@@ -256,13 +257,13 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
               // Browser: copy just the link. Android: share sheet with a readable summary (+ link if hosted).
               const text = !isNative && url ? url : [shareSummary(shared), url].filter(Boolean).join('\n\n')
               const how = await shareText(task.title, text)
-              if (how === 'copied') toast('Share link copied: the task lives only in the link')
+              if (how === 'copied') toast(t('shareCopied'))
             }}
           >
-            <Icon name="share" size={14} /> Share
+            <Icon name="share" size={14} /> {t('share')}
           </button>
-          <button className="btn" onClick={() => duplicateTask(task).then(() => toast('Task duplicated'))}>
-            <Icon name="copy" size={14} /> Duplicate
+          <button className="btn" onClick={() => duplicateTask(task).then(() => toast(t('duplicated')))}>
+            <Icon name="copy" size={14} /> {t('duplicate')}
           </button>
           <span className="spacer" />
           <button
@@ -272,7 +273,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
               dialog.current?.close()
             }}
           >
-            <Icon name="trash" size={14} /> {task.rrule ? 'Delete series' : 'Delete'}
+            <Icon name="trash" size={14} /> {task.rrule ? t('deleteSeries') : t('delete')}
           </button>
         </div>
       </div>

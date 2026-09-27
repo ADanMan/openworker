@@ -1,3 +1,4 @@
+import { fmt, t, type Key } from '../i18n'
 import { useState } from 'react'
 import {
   customToRule,
@@ -9,17 +10,19 @@ import {
   type RepeatPreset,
 } from '../lib/recurrence'
 
-const PRESETS: [RepeatPreset, string][] = [
-  ['none', 'Does not repeat'],
-  ['daily', 'Every day'],
-  ['weekdays', 'Every weekday (Mon–Fri)'],
-  ['weekly', 'Every week'],
-  ['biweekly', 'Every 2 weeks'],
-  ['monthly', 'Every month'],
-  ['yearly', 'Every year'],
-  ['custom', 'Custom…'],
+const PRESETS: [RepeatPreset, Key][] = [
+  ['none', 'repeatNone'],
+  ['daily', 'repeatDaily'],
+  ['weekdays', 'repeatWeekdays'],
+  ['weekly', 'repeatWeekly'],
+  ['biweekly', 'repeatBiweekly'],
+  ['monthly', 'repeatMonthly'],
+  ['yearly', 'repeatYearly'],
+  ['custom', 'repeatCustom'],
 ]
-const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+// Monday-first order; values are JS weekday indexes (0 = Sunday). 2024-01-07 is a Sunday.
+const DOW = [1, 2, 3, 4, 5, 6, 0]
+const dowLabel = (d: number) => fmt(new Date(2024, 0, 7 + d), 'EEEEE')
 
 export function RepeatEditor({
   date,
@@ -31,7 +34,7 @@ export function RepeatEditor({
   onChange: (rrule: string | null) => void
 }) {
   const [preset, setPreset] = useState<RepeatPreset>(() => detectPreset(rrule, date))
-  if (!date) return <p className="muted small">Put the task on a day to make it repeat.</p>
+  if (!date) return <p className="muted small">{t('repeatNeedsDay')}</p>
 
   const custom = parseCustom(rrule, date)
   const setCustom = (patch: Partial<CustomRule>) => onChange(customToRule({ ...custom, ...patch }))
@@ -48,14 +51,14 @@ export function RepeatEditor({
       >
         {PRESETS.map(([value, label]) => (
           <option key={value} value={value}>
-            {label}
+            {t(label)}
           </option>
         ))}
       </select>
       {preset === 'custom' && (
         <div className="repeat-custom">
           <label>
-            Every
+            {t('every')}
             <input
               type="number"
               min={1}
@@ -63,15 +66,15 @@ export function RepeatEditor({
               onChange={(e) => setCustom({ interval: Number(e.target.value) || 1 })}
             />
             <select value={custom.freq} onChange={(e) => setCustom({ freq: e.target.value as CustomRule['freq'] })}>
-              <option value="DAILY">day(s)</option>
-              <option value="WEEKLY">week(s)</option>
-              <option value="MONTHLY">month(s)</option>
-              <option value="YEARLY">year(s)</option>
+              <option value="DAILY">{t('days')}</option>
+              <option value="WEEKLY">{t('weeks')}</option>
+              <option value="MONTHLY">{t('months')}</option>
+              <option value="YEARLY">{t('years')}</option>
             </select>
           </label>
           {custom.freq === 'WEEKLY' && (
             <div className="dow-picker">
-              {DOW.map((label, i) => (
+              {DOW.map((i) => (
                 <button
                   key={i}
                   className={custom.weekdays.includes(i) ? 'on' : ''}
@@ -83,17 +86,17 @@ export function RepeatEditor({
                     })
                   }
                 >
-                  {label}
+                  {dowLabel(i)}
                 </button>
               ))}
             </div>
           )}
           <label>
-            Ends
+            {t('ends')}
             <select value={custom.end} onChange={(e) => setCustom({ end: e.target.value as CustomRule['end'] })}>
-              <option value="never">never</option>
-              <option value="until">on date</option>
-              <option value="count">after N times</option>
+              <option value="never">{t('endsNever')}</option>
+              <option value="until">{t('endsOn')}</option>
+              <option value="count">{t('endsAfter')}</option>
             </select>
             {custom.end === 'until' && (
               <input type="date" value={custom.until} onChange={(e) => setCustom({ until: e.target.value })} />
@@ -109,7 +112,7 @@ export function RepeatEditor({
           </label>
         </div>
       )}
-      {rrule && <p className="muted small">Repeats {describe({ date, rrule })}</p>}
+      {rrule && <p className="muted small">{t('repeats', { rule: describe({ date, rrule }) })}</p>}
     </div>
   )
 }

@@ -14,8 +14,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { format } from 'date-fns'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { containerOf, dayContainer, moveItem } from './actions'
 import { BoardContext, type BoardState } from './board'
 import { ensureSeed, updateSettings } from './db'
@@ -37,6 +36,7 @@ import { Toasts } from './components/Toasts'
 import { WeekView } from './components/WeekView'
 import type { ContainerId, FeedEvent, Item, Settings, Task } from './types'
 import { focusAddLine } from './ui'
+import { fmt, resolveLocale, setLocale, t } from './i18n'
 import { installBackButton, onReminderTap } from './native'
 
 type Panel = 'settings' | 'search' | 'shortcuts' | null
@@ -69,6 +69,8 @@ export default function App() {
     ensureSeed().then(() => setReady(true))
   }, [])
   const settings = useSettings()
+  // Locale is module state read by t(); set it before any child renders.
+  if (settings) setLocale(resolveLocale(settings.language))
   useTheme(settings)
   if (!ready || !settings?.activeCalendarId) return <div className="loading">opentweek</div>
   return <Board settings={settings} />
@@ -208,6 +210,35 @@ function Board({ settings }: { settings: Settings }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [view, today, settings.hideCompleted, settings.showSomeday])
 
+  // Touch: horizontal swipe on the board changes week/month (ignored while dragging a task).
+  const boardRef = useRef<HTMLElement>(null)
+  const touch = useRef<{ x: number; y: number; t: number } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => {
+    const p = e.touches[0]
+    touch.current = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, t: Date.now() } : null
+  }
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current
+    touch.current = null
+    if (!start || dragging) return
+    const p = e.changedTouches[0]
+    const dx = p.clientX - start.x
+    const dy = p.clientY - start.y
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2 && Date.now() - start.t < 600) {
+      setAnchor((a) => shift(a, view, dx < 0 ? 1 : -1))
+    }
+  }
+
+  // Phones show days stacked vertically: bring today into view when the week opens.
+  const weekStart = days[0]
+  useEffect(() => {
+    if (view !== 'week' || !window.matchMedia('(max-width: 820px)').matches) return
+    // Scroll only the board: scrollIntoView would also move the page and the header.
+    const board = boardRef.current
+    const el = board?.querySelector('.day.is-today')
+    if (board && el) board.scrollTop += el.getBoundingClientRect().top - board.getBoundingClientRect().top
+  }, [view, weekStart])
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -233,10 +264,10 @@ function Board({ settings }: { settings: Settings }) {
   const calendar = calendars.find((c) => c.id === calendarId)
   const title =
     view === 'week'
-      ? format(fromISODate(days[0]), 'MMMM yyyy') !== format(fromISODate(days[6]), 'MMMM yyyy')
-        ? `${format(fromISODate(days[0]), 'MMM')} – ${format(fromISODate(days[6]), 'MMM yyyy')}`
-        : format(fromISODate(days[0]), 'MMMM yyyy')
-      : format(anchor, 'MMMM yyyy')
+      ? fmt(fromISODate(days[0]), 'LLLL yyyy') !== fmt(fromISODate(days[6]), 'LLLL yyyy')
+        ? `${fmt(fromISODate(days[0]), 'LLL')} – ${fmt(fromISODate(days[6]), 'LLL yyyy')}`
+        : fmt(fromISODate(days[0]), 'LLLL yyyy')
+      : fmt(anchor, 'LLLL yyyy')
 
   return (
     <BoardContext.Provider value={board}>
@@ -247,7 +278,7 @@ function Board({ settings }: { settings: Settings }) {
             <select
               className="calendar-select"
               value={calendarId}
-              aria-label="Calendar"
+              aria-label={t('calendar')}
               onChange={(e) => updateSettings({ activeCalendarId: e.target.value })}
             >
               {calendars.map((c) => (
@@ -262,43 +293,45 @@ function Board({ settings }: { settings: Settings }) {
             {view === 'week' && settings.showWeekNumbers && <span className="week-badge">W{weekNumber(days[3])}</span>}
           </div>
           <nav className="nav">
-            <button className="icon-btn" aria-label="Previous" onClick={() => setAnchor((a) => shift(a, view, -1))}>
+            <button className="icon-btn" aria-label={t('previous')} onClick={() => setAnchor((a) => shift(a, view, -1))}>
               <Icon name="left" />
             </button>
             <button className="btn today-btn" onClick={() => setAnchor(new Date())}>
-              Today
+              {t('today')}
             </button>
-            <button className="icon-btn" aria-label="Next" onClick={() => setAnchor((a) => shift(a, view, 1))}>
+            <button className="icon-btn" aria-label={t('next')} onClick={() => setAnchor((a) => shift(a, view, 1))}>
               <Icon name="right" />
             </button>
             <div className="segmented" role="tablist">
               {(['week', 'month'] as const).map((v) => (
                 <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => updateSettings({ view: v })}>
-                  {v === 'week' ? 'Week' : 'Month'}
+                  {v === 'week' ? t('week') : t('month')}
                 </button>
               ))}
             </div>
-            <button className="icon-btn" aria-label="Search" title="Search (/)" onClick={() => setPanel('search')}>
+          </nav>
+          <div className="tools">
+            <button className="icon-btn" aria-label={t('search')} title={`${t('search')} (/)`} onClick={() => setPanel('search')}>
               <Icon name="search" />
             </button>
             <button
-              className={`icon-btn optional${settings.hideCompleted ? ' active' : ''}`}
-              aria-label={settings.hideCompleted ? 'Show completed' : 'Hide completed'}
-              title="Hide completed (H)"
+              className={`icon-btn${settings.hideCompleted ? ' active' : ''}`}
+              aria-label={settings.hideCompleted ? t('showCompleted') : t('hideCompleted')}
+              title={`${t('hideCompleted')} (H)`}
               onClick={() => updateSettings({ hideCompleted: !settings.hideCompleted })}
             >
               <Icon name={settings.hideCompleted ? 'eyeOff' : 'eye'} />
             </button>
-            <button className="icon-btn hide-mobile" aria-label="Print" title="Print (P)" onClick={() => window.print()}>
+            <button className="icon-btn hide-mobile" aria-label={t('print')} title={`${t('print')} (P)`} onClick={() => window.print()}>
               <Icon name="print" />
             </button>
-            <button className="icon-btn hide-mobile" aria-label="Shortcuts" title="Shortcuts (?)" onClick={() => setPanel('shortcuts')}>
+            <button className="icon-btn hide-mobile" aria-label={t('shortcuts')} title={`${t('shortcuts')} (?)`} onClick={() => setPanel('shortcuts')}>
               <Icon name="keyboard" />
             </button>
-            <button className="icon-btn" aria-label="Settings" title="Settings (,)" onClick={() => setPanel('settings')}>
+            <button className="icon-btn" aria-label={t('settings')} title={`${t('settings')} (,)`} onClick={() => setPanel('settings')}>
               <Icon name="settings" />
             </button>
-          </nav>
+          </div>
         </header>
 
         <DndContext
@@ -312,12 +345,12 @@ function Board({ settings }: { settings: Settings }) {
             setOverContainer(null)
           }}
         >
-          <main className="board">
+          <main className="board" ref={boardRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {view === 'week' ? <WeekView days={days} /> : <MonthView weeks={grid} month={anchor.getMonth()} />}
           </main>
           <section className={`someday-wrap${settings.showSomeday ? '' : ' collapsed'}`}>
             <button className="someday-toggle" onClick={() => updateSettings({ showSomeday: !settings.showSomeday })}>
-              <Icon name="chevronDown" size={14} /> Someday
+              <Icon name="chevronDown" size={14} /> {t('someday')}
             </button>
             {settings.showSomeday && <SomedayPanel lists={lists} />}
           </section>

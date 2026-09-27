@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { fmt, fmtWeekday, t } from '../i18n'
 import { dayContainer } from '../actions'
 import { useBoard } from '../board'
 import { fromISODate, isWeekend } from '../lib/dates'
@@ -9,11 +9,11 @@ function DayHeader({ date }: { date: string }) {
   const d = fromISODate(date)
   return (
     <header className={`day-header${date === today ? ' today' : ''}`}>
-      <button className="day-date" onClick={() => goToDate(date, 'month')} title="Open month">
-        <span className="day-num">{format(d, 'd')}</span>
-        <span className="day-month">{format(d, 'MMM')}</span>
+      <button className="day-date" onClick={() => goToDate(date, 'month')} title={t('openMonth')}>
+        <span className="day-num">{fmt(d, 'd')}</span>
+        <span className="day-month">{fmt(d, 'MMM')}</span>
       </button>
-      <span className="day-name">{format(d, 'EEE')}</span>
+      <span className="day-name">{fmtWeekday(d)}</span>
     </header>
   )
 }

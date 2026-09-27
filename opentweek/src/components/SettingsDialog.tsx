@@ -4,9 +4,10 @@ import { db, uid, updateSettings } from '../db'
 import { refreshFeed } from '../hooks/background'
 import { useCalendars, useFeeds } from '../hooks/data'
 import { toast } from '../hooks/toast'
+import { t } from '../i18n'
 import { exportBackup, importBackup, type Backup } from '../lib/backup'
-import { requestNotificationPermission, saveFile } from '../native'
 import { exportICS, parseTasks } from '../lib/ics'
+import { isNative, requestNotificationPermission, saveFile } from '../native'
 import { COLORS, type ColorKey, type Settings } from '../types'
 import { Dialog } from './Dialog'
 import { Icon } from './Icon'
@@ -43,31 +44,39 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
   const active = calendars.find((c) => c.id === settings.activeCalendarId)
 
   return (
-    <Dialog title="Settings" onClose={onClose} className="settings">
+    <Dialog title={t('settings')} onClose={onClose} className="settings">
       <section>
-        <h3>Appearance</h3>
+        <h3>{t('appearance')}</h3>
         <label className="setting">
-          Theme
+          {t('language')}
+          <select value={settings.language} onChange={(e) => set({ language: e.target.value as Settings['language'] })}>
+            <option value="auto">{t('languageAuto')}</option>
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <label className="setting">
+          {t('theme')}
           <select value={settings.theme} onChange={(e) => set({ theme: e.target.value as Settings['theme'] })}>
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="system">{t('themeSystem')}</option>
+            <option value="light">{t('themeLight')}</option>
+            <option value="dark">{t('themeDark')}</option>
           </select>
         </label>
         <div className="setting">
-          Accent
+          {t('accent')}
           <ColorSelect value={settings.accent} onChange={(accent) => set({ accent })} />
         </div>
         <label className="setting">
-          Paper
+          {t('paper')}
           <select value={settings.paper} onChange={(e) => set({ paper: e.target.value as Settings['paper'] })}>
-            <option value="lined">Lined</option>
-            <option value="dotted">Dotted</option>
-            <option value="plain">Plain (extra minimal)</option>
+            <option value="lined">{t('paperLined')}</option>
+            <option value="dotted">{t('paperDotted')}</option>
+            <option value="plain">{t('paperPlain')}</option>
           </select>
         </label>
         <label className="setting">
-          Text size
+          {t('textSize')}
           <input
             type="range"
             min={0.85}
@@ -80,27 +89,27 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
       </section>
 
       <section>
-        <h3>Calendar</h3>
+        <h3>{t('calendar')}</h3>
         <label className="setting">
-          Week starts on
+          {t('weekStartsOn')}
           <select
             value={settings.weekStartsOn}
             onChange={(e) => set({ weekStartsOn: Number(e.target.value) as Settings['weekStartsOn'] })}
           >
-            <option value={1}>Monday</option>
-            <option value={0}>Sunday</option>
-            <option value={6}>Saturday</option>
+            <option value={1}>{t('monday')}</option>
+            <option value={0}>{t('sunday')}</option>
+            <option value={6}>{t('saturday')}</option>
           </select>
         </label>
         <label className="setting">
-          Weekend
+          {t('weekend')}
           <select
             value={settings.weekendLayout}
             onChange={(e) => set({ weekendLayout: e.target.value as Settings['weekendLayout'] })}
           >
-            <option value="compact">Stacked (Sat + Sun in one column)</option>
-            <option value="full">Full columns</option>
-            <option value="hidden">Hidden</option>
+            <option value="compact">{t('weekendCompact')}</option>
+            <option value="full">{t('weekendFull')}</option>
+            <option value="hidden">{t('weekendHidden')}</option>
           </select>
         </label>
         <label className="setting check-setting">
@@ -109,7 +118,7 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             checked={settings.showWeekNumbers}
             onChange={(e) => set({ showWeekNumbers: e.target.checked })}
           />
-          Show week numbers
+          {t('showWeekNumbers')}
         </label>
         <label className="setting check-setting">
           <input
@@ -117,7 +126,7 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             checked={settings.hideCompleted}
             onChange={(e) => set({ hideCompleted: e.target.checked })}
           />
-          Hide completed tasks
+          {t('hideCompletedTasks')}
         </label>
         <label className="setting check-setting">
           <input
@@ -125,7 +134,7 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             checked={settings.autoRollover}
             onChange={(e) => set({ autoRollover: e.target.checked })}
           />
-          Move unfinished tasks to today automatically
+          {t('autoRollover')}
         </label>
         <label className="setting check-setting">
           <input
@@ -133,18 +142,16 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             checked={settings.notifications}
             onChange={async (e) => {
               const on = e.target.checked
-              if (on && !(await requestNotificationPermission())) {
-                return toast('Notifications are blocked: allow them in system settings')
-              }
+              if (on && !(await requestNotificationPermission())) return toast(t('notificationsBlocked'))
               await set({ notifications: on })
             }}
           />
-          Reminder notifications
+          {t('reminderNotifications')}
         </label>
       </section>
 
       <section>
-        <h3>Calendars</h3>
+        <h3>{t('calendars')}</h3>
         <ul className="manage-list">
           {calendars.map((c) => (
             <li key={c.id}>
@@ -157,9 +164,9 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               <button
                 className="icon-btn subtle"
                 disabled={calendars.length < 2}
-                aria-label={`Delete ${c.name}`}
+                aria-label={t('deleteCalendar', { name: c.name })}
                 onClick={async () => {
-                  if (!confirm(`Delete calendar "${c.name}" with all its tasks?`)) return
+                  if (!confirm(t('confirmDeleteCalendar', { name: c.name }))) return
                   if (c.id === settings.activeCalendarId) {
                     await set({ activeCalendarId: calendars.find((x) => x.id !== c.id)!.id })
                   }
@@ -176,40 +183,41 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
           onClick={async () => {
             const id = uid()
             await db.transaction('rw', db.calendars, db.lists, async () => {
-              await db.calendars.add({ id, name: 'New calendar', color: 'green', order: calendars.length })
-              await db.lists.add({ id: uid(), calendarId: id, name: 'Someday', order: 0 })
+              await db.calendars.add({ id, name: t('newCalendar'), color: 'green', order: calendars.length })
+              await db.lists.add({ id: uid(), calendarId: id, name: t('someday'), order: 0 })
             })
             await set({ activeCalendarId: id })
           }}
         >
-          <Icon name="plus" size={14} /> Add calendar
+          <Icon name="plus" size={14} /> {t('addCalendar')}
         </button>
       </section>
 
       <section>
-        <h3>Subscribed calendars (read-only)</h3>
-        <p className="muted small">
-          Paste an iCal / webcal link, such as Google Calendar's "Secret address in iCal format", an Apple iCloud
-          public calendar or an Outlook ICS link. Events show on your week.
-        </p>
+        <h3>{t('subscriptions')}</h3>
+        <p className="muted small">{t('subscriptionsHint')}</p>
         <ul className="manage-list">
           {feeds.map((f) => (
             <li key={f.id}>
               <input
                 type="checkbox"
                 checked={f.enabled}
-                aria-label="Show"
+                aria-label={t('show')}
                 onChange={(e) => db.feeds.update(f.id, { enabled: e.target.checked })}
               />
               <input defaultValue={f.name} onBlur={(e) => db.feeds.update(f.id, { name: e.target.value })} />
               <ColorSelect value={f.color} onChange={(color) => db.feeds.update(f.id, { color })} />
               <span className={`muted small${f.error ? ' error' : ''}`} title={f.url}>
-                {f.error ?? (f.fetchedAt ? `${f.events.length} events` : 'not synced')}
+                {f.error ?? (f.fetchedAt ? t('events', { n: f.events.length }) : t('notSynced'))}
               </span>
-              <button className="icon-btn subtle" aria-label="Refresh" onClick={() => refreshFeed(f, settings.corsProxy)}>
+              <button
+                className="icon-btn subtle"
+                aria-label={t('refresh')}
+                onClick={() => refreshFeed(f, settings.corsProxy)}
+              >
                 <Icon name="repeat" size={14} />
               </button>
-              <button className="icon-btn subtle" aria-label="Remove" onClick={() => db.feeds.delete(f.id)}>
+              <button className="icon-btn subtle" aria-label={t('remove')} onClick={() => db.feeds.delete(f.id)}>
                 <Icon name="trash" size={14} />
               </button>
             </li>
@@ -220,9 +228,15 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
           onSubmit={async (e) => {
             e.preventDefault()
             if (!feedUrl.trim()) return
+            let name = feedUrl
+            try {
+              name = new URL(feedUrl).hostname
+            } catch {
+              return toast(t('importFailed', { error: 'URL' }))
+            }
             const feed = {
               id: uid(),
-              name: new URL(feedUrl.replace(/^webcal:/i, 'https:')).hostname,
+              name,
               url: feedUrl.trim(),
               color: 'gray' as const,
               enabled: true,
@@ -242,22 +256,24 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
             onChange={(e) => setFeedUrl(e.target.value.replace(/^webcal:/i, 'https:'))}
           />
           <button className="btn" type="submit">
-            Subscribe
+            {t('subscribe')}
           </button>
         </form>
-        <label className="setting">
-          CORS proxy
-          <input
-            placeholder="https://proxy.example/?url={url}"
-            defaultValue={settings.corsProxy}
-            onBlur={(e) => set({ corsProxy: e.target.value.trim() })}
-          />
-        </label>
+        {!isNative && (
+          <label className="setting">
+            {t('corsProxy')}
+            <input
+              placeholder="https://proxy.example/?url={url}"
+              defaultValue={settings.corsProxy}
+              onBlur={(e) => set({ corsProxy: e.target.value.trim() })}
+            />
+          </label>
+        )}
       </section>
 
       <section>
-        <h3>Data</h3>
-        <p className="muted small">Everything is stored locally in this browser (IndexedDB). Back it up regularly.</p>
+        <h3>{t('data')}</h3>
+        <p className="muted small">{t('dataHint')}</p>
         <div className="button-row">
           <button
             className="btn"
@@ -269,31 +285,32 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               )
             }
           >
-            Export backup (.json)
+            {t('exportBackup')}
           </button>
           <button
             className="btn"
             onClick={async () => {
               const file = await pickFile('application/json,.json')
-              if (!file || !confirm('Replace ALL current data with this backup?')) return
+              if (!file || !confirm(t('confirmRestore'))) return
               try {
                 await importBackup(JSON.parse(await file.text()) as Backup)
-                toast('Backup restored')
+                toast(t('restored'))
               } catch (e) {
-                toast(`Import failed: ${String(e)}`)
+                toast(t('importFailed', { error: String(e) }))
               }
             }}
           >
-            Restore backup
+            {t('restoreBackup')}
           </button>
           <button
             className="btn"
             onClick={async () => {
               const tasks = await db.tasks.where('calendarId').equals(settings.activeCalendarId).toArray()
-              saveFile(`${active?.name ?? 'opentweek'}.ics`, exportICS(tasks, active?.name ?? 'opentweek'), 'text/calendar')
+              const name = active?.name ?? 'opentweek'
+              await saveFile(`${name}.ics`, exportICS(tasks, name), 'text/calendar')
             }}
           >
-            Export calendar (.ics)
+            {t('exportIcs')}
           </button>
           <button
             className="btn"
@@ -303,19 +320,26 @@ export function SettingsDialog({ settings, onClose }: { settings: Settings; onCl
               try {
                 const parsed = parseTasks(await file.text())
                 await db.tasks.bulkAdd(
-                  parsed.map((t, i) =>
-                    newTask({ ...t, calendarId: settings.activeCalendarId, order: Date.now() + i }),
+                  parsed.map((task, i) =>
+                    newTask({ ...task, calendarId: settings.activeCalendarId, order: Date.now() + i }),
                   ),
                 )
-                toast(`Imported ${parsed.length} tasks`)
+                toast(t('imported', { n: parsed.length }))
               } catch (e) {
-                toast(`Import failed: ${String(e)}`)
+                toast(t('importFailed', { error: String(e) }))
               }
             }}
           >
-            Import .ics as tasks
+            {t('importIcs')}
           </button>
         </div>
+      </section>
+
+      <section>
+        <h3>{t('about')}</h3>
+        <p className="muted small">
+          opentweek · {t('version', { v: __APP_VERSION__ })} · {t('sourceCode')}
+        </p>
       </section>
     </Dialog>
   )

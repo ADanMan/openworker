@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import { t } from './i18n'
 import type { Calendar, Feed, Settings, SomedayList, Task } from './types'
 
 interface KV {
@@ -31,6 +32,7 @@ export const uid = () => crypto.randomUUID()
 
 export const DEFAULT_SETTINGS: Settings = {
   activeCalendarId: '',
+  language: 'auto',
   weekStartsOn: 1,
   weekendLayout: 'compact',
   theme: 'system',
@@ -63,9 +65,9 @@ export async function ensureSeed() {
   await db.transaction('rw', db.calendars, db.lists, db.kv, async () => {
     let calendars = await db.calendars.orderBy('order').toArray()
     if (calendars.length === 0) {
-      const cal: Calendar = { id: uid(), name: 'Personal', color: 'blue', order: 0 }
+      const cal: Calendar = { id: uid(), name: t('personal'), color: 'blue', order: 0 }
       await db.calendars.add(cal)
-      await db.lists.add({ id: uid(), calendarId: cal.id, name: 'Someday', order: 0 })
+      await db.lists.add({ id: uid(), calendarId: cal.id, name: t('someday'), order: 0 })
       calendars = [cal]
     }
     const settings = await getSettings()
