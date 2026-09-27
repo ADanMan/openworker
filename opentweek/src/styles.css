@@ -1,7 +1,8 @@
 :root {
   --scale: 1;
   --line: calc(30px * var(--scale));
-  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font: 'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Comfortaa', 'Montserrat', system-ui, sans-serif;
   --bg: #ffffff;
   --panel: #fafaf9;
   --text: #1c1c1e;
@@ -111,7 +112,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.loading { display: grid; place-items: center; height: 100%; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+.loading { font-family: var(--font-display); display: grid; place-items: center; height: 100%; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85em; }
 .error { color: var(--danger); }
@@ -138,7 +139,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 }
 .calendar-select { border: 0; font-weight: 600; background: transparent; padding: 4px 2px; }
 .period { display: flex; align-items: baseline; gap: 10px; flex: 1; min-width: 0; }
-.period h1 { margin: 0; font-size: 1.55em; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.period h1 { margin: 0; font-family: var(--font-display); font-size: 1.55em; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .period h1::first-letter { text-transform: uppercase; }
 .week-badge { color: var(--muted); font-weight: 600; font-size: 0.9em; }
 .nav, .tools { display: flex; align-items: center; gap: 4px; }
@@ -197,7 +198,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   height: calc(var(--line) + 6px); border-bottom: 2px solid var(--text); padding: 0 2px;
 }
 .day-date { display: flex; align-items: baseline; gap: 5px; }
-.day-num { font-size: 1.3em; font-weight: 700; letter-spacing: -0.02em; }
+.day-num { font-family: var(--font-display); font-size: 1.3em; font-weight: 700; }
 .day-month { color: var(--muted); font-size: 0.85em; font-weight: 500; }
 .day-name { color: var(--muted); font-size: 0.85em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 .day-header.today { border-bottom-color: var(--accent); }
@@ -266,7 +267,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .cell { border-top: 1px solid var(--rule-strong); min-height: 104px; --line: calc(24px * var(--scale)); font-size: 0.92em; }
 .cell .lines { min-height: calc(var(--line) * 3); }
 .cell-header { height: 24px; display: flex; align-items: center; }
-.cell-header button { font-weight: 600; padding: 0 4px; border-radius: 6px; }
+.cell-header button { font-family: var(--font-display); font-weight: 700; padding: 0 4px; border-radius: 6px; }
 .cell-header.today button { background: var(--accent); color: #fff; }
 .cell.other-month { opacity: 0.45; }
 .cell .add-line { padding-left: 4px; }
@@ -279,7 +280,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .someday .list { flex: 0 0 min(240px, 70vw); }
 .someday .list .lines { overflow-y: auto; }
 .list-header { display: flex; align-items: center; justify-content: space-between; height: calc(var(--line) + 2px); border-bottom: 2px solid var(--rule-strong); }
-.list-header h3 { margin: 0; font-size: 1em; font-weight: 700; cursor: text; }
+.list-header h3 { margin: 0; font-family: var(--font-display); font-size: 1em; font-weight: 700; cursor: text; }
 .list-header input { padding: 2px 4px; }
 .list-header .icon-btn { opacity: 0; }
 .list-header:hover .icon-btn { opacity: 0.7; }
@@ -294,7 +295,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .modal::backdrop { background: rgba(0, 0, 0, 0.3); }
 .modal-body { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 14px; }
 .modal-top { display: flex; align-items: center; gap: 10px; }
-.modal-top h2 { margin: 0; flex: 1; font-size: 1.2em; }
+.modal-top h2 { margin: 0; flex: 1; font-family: var(--font-display); font-size: 1.2em; }
 .title-input { flex: 1; font-size: 1.25em; font-weight: 600; border: 0; padding: 4px 0; }
 .check.big, .subtasks .check {
   flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
@@ -345,7 +346,7 @@ textarea { resize: vertical; min-height: 80px; }
 
 .settings section { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
 .settings section:last-child { border-bottom: 0; }
-.settings h3 { margin: 0; font-size: 0.95em; }
+.settings h3 { margin: 0; font-family: var(--font-display); font-size: 0.95em; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .check-setting { justify-content: flex-start; }
 .manage-list li > input:not([type='checkbox']) { flex: 1; }
