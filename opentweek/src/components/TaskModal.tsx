@@ -1,0 +1,269 @@
+import { useEffect, useRef, useState } from 'react'
+import { detachOccurrence, duplicateTask, skipOccurrence, toggleDone, updateTask } from '../actions'
+import { uid } from '../db'
+import { toast } from '../hooks/toast'
+import { shareUrl, toShared } from '../lib/share'
+import { COLORS, type Item, type SomedayList, type Subtask } from '../types'
+import { Icon } from './Icon'
+import { RepeatEditor } from './RepeatEditor'
+import { removeWithUndo } from '../ui'
+
+const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1e3)} KB`)
+
+function AttachmentLink({ blob, name }: { blob: Blob; name: string }) {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    const u = URL.createObjectURL(blob)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [blob])
+  return blob.type.startsWith('image/') ? (
+    <a href={url} target="_blank" rel="noreferrer">
+      <img src={url} alt={name} className="thumb" />
+    </a>
+  ) : (
+    <a href={url} download={name}>
+      {name}
+    </a>
+  )
+}
+
+export function TaskModal({ item, lists, onClose }: { item: Item; lists: SomedayList[]; onClose: () => void }) {
+  const { task } = item
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [newSub, setNewSub] = useState('')
+  const set = (patch: Parameters<typeof updateTask>[1]) => updateTask(task.id, patch)
+  const setSubtasks = (subtasks: Subtask[]) => set({ subtasks })
+
+  useEffect(() => {
+    dialog.current?.showModal()
+  }, [])
+
+  const where = task.date ? 'day' : `list:${task.listId}`
+
+  return (
+    <dialog
+      ref={dialog}
+      className="modal task-modal"
+      onClose={onClose}
+      onClick={(e) => e.target === dialog.current && dialog.current?.close()}
+    >
+      <div className="modal-body">
+        <div className="modal-top">
+          <button
+            className={`check big${item.done ? ' on' : ''}`}
+            aria-label="Toggle done"
+            onClick={() => toggleDone({ ...item, done: item.done })}
+          >
+            {item.done && <Icon name="check" size={14} />}
+          </button>
+          <input
+            className="title-input"
+            defaultValue={task.title}
+            key={task.id}
+            placeholder="Task"
+            onChange={(e) => set({ title: e.target.value })}
+          />
+          <button className="icon-btn" aria-label="Close" onClick={() => dialog.current?.close()}>
+            <Icon name="close" />
+          </button>
+        </div>
+
+        {item.occurrence && (
+          <div className="banner">
+            <Icon name="repeat" size={14} /> Repeating task: edits apply to every occurrence.
+            <span className="banner-actions">
+              <button onClick={() => skipOccurrence(item).then(() => dialog.current?.close())}>Skip this one</button>
+              <button
+                onClick={() =>
+                  detachOccurrence(item, { date: item.date, listId: null }).then(() => dialog.current?.close())
+                }
+              >
+                Edit only this one
+              </button>
+            </span>
+          </div>
+        )}
+
+        <div className="field-row">
+          <label className="field">
+            <span>When</span>
+            <select
+              value={where}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === 'day') set({ date: item.date ?? new Date().toISOString().slice(0, 10), listId: null })
+                else set({ date: null, listId: v.slice(5), rrule: null, reminder: null })
+              }}
+            >
+              <option value="day">On a day</option>
+              {lists.map((l) => (
+                <option key={l.id} value={`list:${l.id}`}>
+                  Someday: {l.name}
+                </option>
+              ))}
+            </select>
+            {task.date && (
+              <input
+                type="date"
+                value={item.occurrence ? task.date : (task.date ?? '')}
+                onChange={(e) => e.target.value && set({ date: e.target.value })}
+                title={item.occurrence ? 'Series start date' : undefined}
+              />
+            )}
+          </label>
+          <label className="field">
+            <span>Reminder</span>
+            <input
+              type="time"
+              disabled={!task.date}
+              value={task.reminder ?? ''}
+              onChange={(e) => set({ reminder: e.target.value || null })}
+            />
+          </label>
+        </div>
+
+        <div className="field">
+          <span>Color</span>
+          <div className="swatches">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                className={`swatch color-${c}${task.color === c ? ' on' : ''}`}
+                aria-label={c}
+                onClick={() => set({ color: c })}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <span>Repeat</span>
+          <RepeatEditor
+            date={task.date}
+            rrule={task.rrule}
+            onChange={(rrule) => set({ rrule, exdates: rrule ? task.exdates : [], doneDates: rrule ? task.doneDates : [] })}
+          />
+        </div>
+
+        <div className="field">
+          <span>Subtasks</span>
+          <ul className="subtasks">
+            {task.subtasks.map((s) => (
+              <li key={s.id} className={s.done ? 'done' : ''}>
+                <button
+                  className={`check${s.done ? ' on' : ''}`}
+                  aria-label="Toggle subtask"
+                  onClick={() => setSubtasks(task.subtasks.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))}
+                >
+                  {s.done && <Icon name="check" size={12} />}
+                </button>
+                <input
+                  defaultValue={s.title}
+                  onBlur={(e) =>
+                    setSubtasks(task.subtasks.map((x) => (x.id === s.id ? { ...x, title: e.target.value } : x)))
+                  }
+                />
+                <button
+                  className="icon-btn subtle"
+                  aria-label="Remove subtask"
+                  onClick={() => setSubtasks(task.subtasks.filter((x) => x.id !== s.id))}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </li>
+            ))}
+            <li>
+              <span className="check placeholder" />
+              <input
+                placeholder="Add subtask"
+                value={newSub}
+                onChange={(e) => setNewSub(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newSub.trim()) {
+                    setSubtasks([...task.subtasks, { id: uid(), title: newSub.trim(), done: false }])
+                    setNewSub('')
+                  }
+                }}
+              />
+            </li>
+          </ul>
+        </div>
+
+        <label className="field">
+          <span>Notes</span>
+          <textarea
+            key={task.id}
+            defaultValue={task.note}
+            rows={4}
+            placeholder="Add a note…"
+            onChange={(e) => set({ note: e.target.value })}
+          />
+        </label>
+
+        <div className="field">
+          <span>Attachments</span>
+          <ul className="attachments">
+            {task.attachments.map((a) => (
+              <li key={a.id}>
+                <AttachmentLink blob={a.blob} name={a.name} />
+                <span className="muted small">{fmtSize(a.size)}</span>
+                <button
+                  className="icon-btn subtle"
+                  aria-label="Remove attachment"
+                  onClick={() => set({ attachments: task.attachments.filter((x) => x.id !== a.id) })}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <label className="btn file-btn">
+            <Icon name="clip" size={14} /> Attach files
+            <input
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                const files = [...(e.target.files ?? [])]
+                e.target.value = ''
+                void set({
+                  attachments: [
+                    ...task.attachments,
+                    ...files.map((f) => ({ id: uid(), name: f.name, type: f.type, size: f.size, blob: f as Blob })),
+                  ],
+                })
+              }}
+            />
+          </label>
+        </div>
+
+        <div className="modal-actions">
+          <button
+            className="btn"
+            onClick={async () => {
+              const url = await shareUrl({ v: 1, title: task.title, tasks: [toShared(task)] })
+              await navigator.clipboard?.writeText(url)
+              toast('Share link copied: the task lives only in the link')
+            }}
+          >
+            <Icon name="share" size={14} /> Share
+          </button>
+          <button className="btn" onClick={() => duplicateTask(task).then(() => toast('Task duplicated'))}>
+            <Icon name="copy" size={14} /> Duplicate
+          </button>
+          <span className="spacer" />
+          <button
+            className="btn danger"
+            onClick={() => {
+              void removeWithUndo(task.id)
+              dialog.current?.close()
+            }}
+          >
+            <Icon name="trash" size={14} /> {task.rrule ? 'Delete series' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  )
+}
