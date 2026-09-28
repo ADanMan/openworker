@@ -15,7 +15,7 @@ npm run build      # static PWA in dist/, host it anywhere
 
 ## Android app (APK)
 
-**Download:** [`releases/opentweek-1.1.0.apk`](releases/opentweek-1.1.0.apk) (Android 7+). Open the file on your phone and allow "Install unknown apps". New versions install over old ones and keep your data.
+**Download:** [`releases/opentweek-1.1.0.apk`](releases/opentweek-1.1.0.apk) (Android 7+). On the phone, open the direct link in Chrome: https://raw.githubusercontent.com/ADanMan/openworker/claude/opentweek-calendar-pro-gjczbp/opentweek/releases/opentweek-1.1.0.apk. Then tap the downloaded file and allow "Install unknown apps" for Chrome when asked. Files opened from chat or messenger apps often show no Install button, because those apps cannot launch the package installer. New versions install over old ones and keep your data.
 
 The Android app is a small native shell, not Capacitor or Gradle: an `Activity` with a `WebView` and a Java bridge, about 670 lines of Java (`android/src`). It builds in about 3 seconds from Ubuntu's archive packages, without Android Studio, Gradle or Google Maven:
 
