@@ -68,16 +68,24 @@ export function LocalDictation({ onText, onBusy, onRecoveredText, allowWake = fa
     return () => clearInterval(interval)
   }, [recording, waiting])
 
-  const error = !state.error ? '' : state.error === 'permission_denied' ? j('permission')
+  const diagnosticErrors: Record<string, string> = {
+    microphone_silenced: 'Android заглушил микрофон приложения. Он может быть занят записью экрана или звонком. Остановите другую запись и запустите диктовку снова.',
+    microphone_unavailable: 'Микрофон недоступен. Проверьте доступ к микрофону и попробуйте снова.',
+    microphone_read_failed: 'Не удалось получить звук с микрофона. Сеанс остановлен; черновик сохранён.',
+    microphone_disconnected: 'Подключение к микрофону прервалось. Запустите диктовку снова.',
+    foreground_service_denied: 'Android не разрешил запустить фоновый микрофон. Откройте приложение и включите ожидание из дневника.',
+    foreground_service_unavailable: 'Фоновый микрофон не запустился. Можно использовать кнопку диктовки в открытом приложении.',
+  }
+  const error = diagnosticErrors[state.error] || (!state.error ? '' : state.error === 'permission_denied' ? j('permission')
     : state.error === 'unsupported' ? j('unsupported') : state.error === 'model_missing' ? j('modelMissing')
       : state.error === 'no_speech' ? j('noSpeech') : state.error === 'wake_timeout' ? j('wakeTimeout')
         : state.error === 'notification_permission' ? j('wakeNotifications') : state.error === 'wake_unsupported' ? j('wakeUnavailable')
-          : /download|checksum|space|extract|model_install/.test(state.error) ? j('downloadFailed') : j('failed')
+          : /download|checksum|space|extract|model_install/.test(state.error) ? j('downloadFailed') : j('failed'))
 
   return <section className="local-dictation" aria-label={j('voice')}>
     <h3><Icon name="mic" /> {j('voice')}</h3>
     {!state.supported ? <p>{j('unsupported')}</p> : <>
-      <p className="journal-hint">{j('voicePrivacy')}</p>
+      <p className="journal-hint">Звук обрабатывается на телефоне. Текст добавляется в черновик.</p>
       {!state.modelReady && <p className="journal-hint">{j('model')}</p>}
       <div className={`voice-status${recording || waiting ? ' recording' : ''}`} role="status" aria-live="polite">
         {(recording || waiting) && <span className="recording-dot" aria-hidden="true" />}
@@ -95,9 +103,10 @@ export function LocalDictation({ onText, onBusy, onRecoveredText, allowWake = fa
           </> : state.modelReady ? <button className="btn" disabled={inserting} onClick={() => { setSeconds(0); controller.start() }}><Icon name="mic" /> {j('record')}</button>
             : <button className="btn" onClick={() => controller.download()}>{j('download')}</button>}
       </div>
+      {waiting && <p className="journal-hint">Скажите «эй, Твик» и сделайте паузу. Начинайте диктовку после смены состояния на «Идёт запись». Если фраза не сработала, прекратите ожидание и используйте кнопку диктовки.</p>}
       {allowWake && state.wakeSupported && <details className="wake-experiment">
         <summary>{j('wakeExperiment')}</summary>
-        <p className="journal-hint">{j('wakeConsent')}</p>
+        <p className="journal-hint">Микрофон слушает до 5 минут, в том числе в других приложениях. Фраза может не сработать. Включите режим ниже; остановить его можно здесь или в уведомлении.</p>
         <label className="wake-opt-in"><input type="checkbox" checked={wakeConsent} disabled={busy || inserting} onChange={(e) => setWakeConsent(e.target.checked)} /> {j('wakeOptIn')}</label>
         <button className="btn" disabled={!wakeConsent || !state.modelReady || state.phase !== 'idle' || !!recovery || inserting} onClick={() => { setSeconds(0); controller.startWake(wakeConsent) }}>{j('startWaiting')}</button>
       </details>}
@@ -114,7 +123,7 @@ export function LocalDictation({ onText, onBusy, onRecoveredText, allowWake = fa
       {recoveryError && <p role="alert">{recoveryError}</p>}
     </section>}
     <details className="journal-hint"><summary>{j('voiceDetails')}</summary>
-      {state.supported && <p>{j('foreground')} {j('pause')}</p>}<p>{j('wake')}</p>
+      <p>{j('voicePrivacy')}</p>{state.supported && <p>{j('foreground')} {j('pause')}</p>}<p>{j('wake')}</p><p>{j('wakeConsent')}</p>
     </details>
   </section>
 }

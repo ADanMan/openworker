@@ -492,3 +492,28 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .wake-experiment .btn { white-space:normal; }
 .wake-recovery { margin-top:16px; padding:12px; background:var(--accent-soft); border-radius:10px; }
 .wake-recovery blockquote { white-space:pre-wrap; overflow-wrap:anywhere; margin:12px 0; max-height:240px; overflow:auto; }
+/* Compact mobile writing flow: editor first, one optional prompt at a time. */
+.journal-step[hidden], .journal-page .field[hidden] { display:none; }
+.journal-step-count { font-size:12px; color:var(--accent); }
+.journal-editor .journal-steps { scroll-margin-top:12px; }
+.journal-editor .journal-guidance { padding:10px; margin:10px 0; }
+.journal-editor .journal-guidance p { margin:4px 0; }
+.journal-editor .journal-steps > p { margin:8px 0; }
+.local-dictation h3 { font-size:14px; margin:0 0 8px; }
+.local-dictation .journal-hint { margin:8px 0; }
+.wake-experiment { margin-top:10px; padding-top:10px; }
+.journal-save-actions { position:sticky; bottom:0; padding:10px 0; background:var(--bg); z-index:1; border-top:1px solid var(--rule); }
+@media (max-width:820px) {
+  .journal-page .journal-editor { order:0; padding:14px; }
+  .journal-page .journal-list { order:1; }
+  .journal-heading h2 { font-size:18px; margin:0 0 4px; }
+  .journal-heading p { margin:4px 0 10px; }
+  .mode-bar { gap:6px; padding:8px 12px; }
+  .mode-bar label { width:auto; margin-left:auto; font-size:11px; }
+  .mode-bar input { padding:6px; width:125px; }
+  .journal-page { padding:12px; }
+  .journal-page .journal-privacy { margin:12px auto; }
+  .journal-page textarea { font-size:16px; }
+}
+
+.segmented[hidden] { display:none; }

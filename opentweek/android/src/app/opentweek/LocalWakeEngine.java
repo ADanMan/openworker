@@ -6,7 +6,6 @@ import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.SystemClock;
 import java.io.File;
-import java.io.IOException;
 import org.json.JSONObject;
 import org.vosk.Model;
 import org.vosk.Recognizer;
@@ -40,14 +39,14 @@ final class LocalWakeEngine {
             if (cancelled) return;
             recognizer = new Recognizer(model, 16000, "[\"эй твик\",\"[unk]\"]");
             int minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-            if (minimum <= 0) throw new IOException("microphone_unavailable");
+            if (minimum <= 0) throw new LocalVoiceFailure("microphone_unavailable");
             capture = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(minimum, 8192));
             audio = capture;
-            if (capture.getState() != AudioRecord.STATE_INITIALIZED) throw new IOException("microphone_unavailable");
+            if (capture.getState() != AudioRecord.STATE_INITIALIZED) throw new LocalVoiceFailure("microphone_unavailable");
             if (cancelled) return;
             capture.startRecording();
-            if (capture.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new IOException("microphone_unavailable");
+            if (capture.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new LocalVoiceFailure("microphone_unavailable");
             gate = new WakePhrase(SystemClock.elapsedRealtime());
             events.event("waiting", null, null);
             byte[] buffer = new byte[4096];
@@ -55,7 +54,8 @@ final class LocalWakeEngine {
                 if (gate.expired(SystemClock.elapsedRealtime())) { events.event("error", null, "wake_timeout"); return; }
                 int n = capture.read(buffer, 0, buffer.length);
                 if (cancelled) return;
-                if (n < 0) throw new IOException("microphone_read_failed");
+                if (n < 0) throw new LocalVoiceFailure(LocalVoiceFailure.readError(n));
+                LocalAudioCapture.checkSilenced(capture);
                 if (n > 0) {
                     candidate.append(buffer, n);
                     if (recognizer.acceptWaveForm(buffer, n)) {
@@ -82,7 +82,8 @@ final class LocalWakeEngine {
             while (!cancelled && !stopped && SystemClock.elapsedRealtime() - started < 120000) {
                 int n = capture.read(buffer, 0, buffer.length);
                 if (cancelled || stopped) break;
-                if (n < 0) throw new IOException("microphone_read_failed");
+                if (n < 0) throw new LocalVoiceFailure(LocalVoiceFailure.readError(n));
+                LocalAudioCapture.checkSilenced(capture);
                 if (n > 0 && recognizer.acceptWaveForm(buffer, n)) {
                     String segment = new JSONObject(recognizer.getResult()).optString("text").trim();
                     if (!segment.isEmpty()) { append(text, segment); endpointAt = SystemClock.elapsedRealtime(); }
@@ -92,6 +93,7 @@ final class LocalWakeEngine {
                 if (endpointAt > 0 && SystemClock.elapsedRealtime() - endpointAt >= 3000) break;
                 if (SystemClock.elapsedRealtime() - started > 15000 && text.length() == 0 && partial.isEmpty()) break;
             }
+            if (!cancelled) LocalAudioCapture.checkSilenced(capture);
             stopAudio(); audio = null; capture.release(); capture = null;
             if (cancelled) return;
             events.event("processing", null, null);
@@ -99,7 +101,7 @@ final class LocalWakeEngine {
             if (gate.finish()) events.event("result", text.toString(), null);
             } finally { if (recognizer != null) recognizer.close(); }
         } catch (Exception | LinkageError e) {
-            if (!cancelled) events.event("error", null, "recognition_failed");
+            if (!cancelled) events.event("error", null, LocalVoiceFailure.recognition(e));
         } finally {
             candidate.reset();
             audio = null;

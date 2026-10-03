@@ -82,7 +82,7 @@ export function JournalPage({ date, calendarId, target, onDate, onOpenTask, onOp
         onRemoved={() => setEditor({ draft: fresh(date), saved: null, revision: ++revision.current })} />}
     </div>
     {error && <p role="alert">{error}</p>}
-    <p className="journal-hint journal-privacy">{j('privacy')} Черновики сохраняются локально, отдельно от завершённых записей.</p>
+    <details className="journal-hint journal-privacy"><summary>Хранение и приватность</summary><p>{j('privacy')} Черновики сохраняются локально, отдельно от завершённых записей.</p></details>
   </main>
 }
 
@@ -98,6 +98,7 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [guided, setGuided] = useState(false)
+  const [step, setStep] = useState(0)
   const [voiceField, setVoiceField] = useState('text')
   const queue = useRef<Promise<boolean>>(Promise.resolve(true))
   const operation = useRef(false)
@@ -106,6 +107,8 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
   const feed = feeds.find((f) => f.id === draft.feedId)
   const event = feed?.events.find((e) => e.uid === draft.eventUid && e.date === draft.occurrenceDate)
   const guidance = getGuidance(draft.context ?? undefined)
+  const currentField = guided ? JOURNAL_FIELDS[step].key : voiceField
+  const moveStep = (next: number) => { setStep(next); document.querySelector('.journal-steps')?.scrollIntoView({ block: 'nearest' }) }
   useEffect(() => { onBusy(busy || saving); return () => onBusy(false) }, [busy, saving, onBusy])
   const change = (next: JournalDraft) => {
     latest.current = next; setDraft(next); setError(''); setStatus('Сохраняем черновик…')
@@ -149,7 +152,7 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
   }
   const recover = async (text: string, sessionId: string) => {
     await queue.current
-    const entry = await insertWakeDraft(latest.current, voiceField as typeof JOURNAL_CONTENT_FIELDS[number], text, sessionId)
+    const entry = await insertWakeDraft(latest.current, currentField as typeof JOURNAL_CONTENT_FIELDS[number], text, sessionId)
     if (entry) { latest.current = entry; setDraft(entry) }
     setStatus(entry ? 'Диктовка добавлена в локальный черновик' : 'Эта диктовка уже вставлена. Повторное подтверждение не меняет текст.');
     if (entry) setError('')
@@ -163,16 +166,16 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
       <button className="btn subtle" disabled={busy || saving} onClick={() => change({ ...draft, taskId: null, occurrenceDate: null, feedId: null, eventUid: null })}>Убрать связь</button>
     </div>}
     <label className="field"><span>{j('text')}</span><small>Ситуация или свободная запись</small>
-      <textarea rows={5} maxLength={JOURNAL_TEXT_MAX_LENGTH} value={draft.text} disabled={busy || saving} placeholder="Что произошло? Можно описать только то, что хочется сохранить."
+      <textarea rows={3} maxLength={JOURNAL_TEXT_MAX_LENGTH} value={draft.text} disabled={busy || saving} placeholder="Что произошло? Можно описать только то, что хочется сохранить."
         onChange={(e) => change({ ...draft, text: e.target.value })} /></label>
-    <button className="btn guidance-toggle" aria-expanded={guided} onClick={() => setGuided(!guided)}>{guided ? 'Свернуть помощь' : 'Помочь заполнить по шагам'}</button>
+    <button className="btn guidance-toggle" disabled={busy || saving} aria-expanded={guided} onClick={() => setGuided(!guided)}>{guided ? 'Свернуть помощь' : 'Помочь заполнить по шагам'}</button>
     <div className="journal-steps" hidden={!guided}>
-      <p>Подсказки выбираются по указанной вами ситуации. Приложение не определяет ваши чувства по тексту. Выбирайте только то, что подходит, или пропускайте.</p>
-      <label className="field"><span>О чём ситуация?</span><select value={draft.context ?? ''} disabled={busy || saving} onChange={(e) => change({ ...draft, context: (e.target.value || null) as JournalDraft['context'] })}>
+      <label className="field" hidden={step !== 0}><span>О чём ситуация?</span><select value={draft.context ?? ''} disabled={busy || saving} onChange={(e) => change({ ...draft, context: (e.target.value || null) as JournalDraft['context'] })}>
         <option value="">Не выбирать</option>{CONTEXTS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
       </select></label>
-      <div className="journal-guidance"><small>{guidance.reason}</small>{guidance.prompts.map((p) => <p key={p}>{p}</p>)}</div>
-      {JOURNAL_FIELDS.map(({ key, label, prompt }) => <div className="journal-step" key={key}>
+      <details className="journal-guidance"><summary>Подсказки по ситуации</summary><small>{guidance.reason}</small>{guidance.prompts.map((p) => <p key={p}>{p}</p>)}</details>
+      <p className="journal-step-count" role="status">Шаг {step + 1} из {JOURNAL_FIELDS.length} · можно пропустить</p>
+      {JOURNAL_FIELDS.map(({ key, label, prompt }, index) => <div className="journal-step" key={key} hidden={index !== step}>
         <label className="field"><span>{label}</span><small>{prompt} Можно оставить пустым.</small>
           <textarea rows={2} maxLength={JOURNAL_TEXT_MAX_LENGTH} value={draft[key] ?? ''} disabled={busy || saving} onChange={(e) => change({ ...draft, [key]: e.target.value })} />
         </label>
@@ -180,18 +183,23 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
           {(key === 'feelings' ? guidance.feelings : guidance.needs).map((word) => <button className="btn" key={word} disabled={busy || saving} onClick={() => append(key, word)}>{word}</button>)}
         </div>}
       </div>)}
+      <div className="journal-buttons">
+        <button className="btn" disabled={busy || saving || step === 0} onClick={() => moveStep(step - 1)}>Назад</button>
+        <button className="btn" disabled={busy || saving} onClick={() => step + 1 < JOURNAL_FIELDS.length ? moveStep(step + 1) : setGuided(false)}>Пропустить</button>
+        <button className="btn primary" disabled={busy || saving} onClick={() => step + 1 < JOURNAL_FIELDS.length ? moveStep(step + 1) : setGuided(false)}>{step + 1 < JOURNAL_FIELDS.length ? 'Дальше' : 'Завершить шаги'}</button>
+      </div>
     </div>
     {!guided && JOURNAL_FIELDS.some(({ key }) => draft[key]?.trim()) && <p className="journal-hint">В записи есть заполненные разделы. Откройте помощь, чтобы их увидеть.</p>}
     <label className="field"><span>{j('mood')}</span><select value={draft.mood ?? ''} disabled={busy || saving} onChange={(e) => change({ ...draft, mood: e.target.value ? Number(e.target.value) as JournalEntry['mood'] : null })}>
       <option value="">{j('noMood')}</option>{([1, 2, 3, 4, 5] as const).map((m) => <option key={m} value={m}>{m} — {j(`mood${m}`)}</option>)}
     </select></label>
-    <label className="field"><span>Куда вставить диктовку</span><select value={voiceField} disabled={busy || saving} onChange={(e) => setVoiceField(e.target.value)}>
+    <label className="field" hidden={guided}><span>Куда вставить диктовку</span><select value={voiceField} disabled={busy || saving} onChange={(e) => setVoiceField(e.target.value)}>
       <option value="text">Ситуация / свободная запись</option>{JOURNAL_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
     </select></label>
-    <LocalDictation allowWake onBusy={setBusy} onText={(text) => append(voiceField, text)} onRecoveredText={recover} />
-    <p className="journal-hint">Автосохранение сохраняет только черновик. «Сохранить запись» завершает его. Переключение режима остановит микрофон.</p>
+    <LocalDictation allowWake onBusy={setBusy} onText={(text) => append(currentField, text)} onRecoveredText={recover} />
+    <p className="journal-hint">Черновик сохраняется автоматически. Диктовка: {guided ? JOURNAL_FIELDS[step].label : 'выбранный раздел'}.</p>
     {error && <p className="journal-error" role="alert">{error}</p>}{status && <p className="journal-save-status" role="status">{status}</p>}
-    <div className="modal-actions">
+    <div className="modal-actions journal-save-actions">
       <button className="btn primary" disabled={busy || saving || !hasJournalContent(draft)} onClick={save}>{saving ? j('saving') : j('save')}</button>
       <button className="btn" disabled={busy || saving} onClick={discard}>Отменить изменения</button>
       {baseline && <button className="btn danger" disabled={busy || saving} onClick={remove}>{j('delete')}</button>}
