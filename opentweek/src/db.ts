@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { t } from './i18n'
-import type { Calendar, Feed, Settings, SomedayList, Task } from './types'
+import type { Calendar, Feed, JournalEntry, Settings, SomedayList, Task } from './types'
 
 interface KV {
   key: string
@@ -8,6 +8,7 @@ interface KV {
 }
 
 export class OpenTweekDB extends Dexie {
+  journalEntries!: EntityTable<JournalEntry, 'id'>
   tasks!: EntityTable<Task, 'id'>
   lists!: EntityTable<SomedayList, 'id'>
   calendars!: EntityTable<Calendar, 'id'>
@@ -23,6 +24,7 @@ export class OpenTweekDB extends Dexie {
       feeds: 'id',
       kv: 'key',
     })
+    this.version(2).stores({ journalEntries: 'id, date, updatedAt' })
   }
 }
 

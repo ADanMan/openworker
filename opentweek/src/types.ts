@@ -133,3 +133,12 @@ export interface Item {
 }
 
 export type ContainerId = `day:${string}` | `list:${string}`
+
+export interface JournalEntry {
+  id: string
+  date: string
+  text: string
+  mood: 1 | 2 | 3 | 4 | 5 | null
+  createdAt: number
+  updatedAt: number
+}

@@ -73,11 +73,18 @@ public class NativeBridge {
         return activity.voiceAvailable();
     }
 
-    /** System speech dialog; the phrase arrives via window.__otVoice(ok, text). */
+    /** Disabled legacy entry point. Use explicit local dictation session methods. */
     @JavascriptInterface
     public void startVoice(String lang, String prompt) {
         activity.startVoice(lang, prompt);
     }
+
+    @JavascriptInterface public String localVoiceStatus() { return activity.localVoice.status(); }
+    @JavascriptInterface public void downloadLocalVoiceModel() { activity.localVoice.download(); }
+    @JavascriptInterface public void cancelLocalVoiceDownload() { activity.localVoice.cancelDownload(); }
+    @JavascriptInterface public void startLocalVoice(String sessionId) { activity.localVoice.start(sessionId); }
+    @JavascriptInterface public void stopLocalVoice(String sessionId) { activity.localVoice.stop(sessionId); }
+    @JavascriptInterface public void cancelLocalVoice(String sessionId) { activity.localVoice.cancel(sessionId); }
 
     @JavascriptInterface
     public void minimize() {

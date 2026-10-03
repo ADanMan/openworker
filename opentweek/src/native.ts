@@ -24,8 +24,6 @@ declare global {
     __otNotifResult?: (granted: boolean) => void
     __otFetch?: (id: number, ok: boolean, text: string) => void
     __otVoice?: (ok: boolean, text: string) => void
-    webkitSpeechRecognition?: new () => BrowserRecognition
-    SpeechRecognition?: new () => BrowserRecognition
   }
 }
 
@@ -135,7 +133,7 @@ export function installBackButton() {
     const dialogs = document.querySelectorAll<HTMLDialogElement>('dialog[open]')
     const top = dialogs[dialogs.length - 1]
     if (!top) return false
-    top.close()
+    if (top.dispatchEvent(new Event('cancel', { cancelable: true }))) top.close()
     return true
   }
 }
@@ -174,56 +172,6 @@ export function onExternalIntent(handle: (intent: ExternalIntent) => void) {
     handle({ kind: 'text', text: shared })
   }
   return () => {}
-}
-
-interface BrowserRecognition {
-  lang: string
-  interimResults: boolean
-  maxAlternatives: number
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
-  onerror: ((e: { error: string }) => void) | null
-  onend: (() => void) | null
-  start(): void
-}
-
-const browserRecognition = () =>
-  typeof window === 'undefined' ? undefined : (window.SpeechRecognition ?? window.webkitSpeechRecognition)
-
-/** Speech input exists: Android recognizer app, or Web Speech API in the browser. */
-export function voiceAvailable(): boolean {
-  if (bridge) return typeof bridge.voiceAvailable === 'function' && bridge.voiceAvailable()
-  return !!browserRecognition()
-}
-
-/**
- * Listen once and resolve with the recognised phrase ("" if nothing was said).
- * Android: the system speech dialog (Google app). Browser: Web Speech API.
- */
-export function listen(lang: string, prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (bridge) {
-      window.__otVoice = (ok, text) => {
-        window.__otVoice = undefined
-        if (ok) resolve(text)
-        else reject(new Error(text))
-      }
-      bridge.startVoice(lang, prompt)
-      return
-    }
-    const Ctor = browserRecognition()
-    if (!Ctor) return reject(new Error('unsupported'))
-    const rec = new Ctor()
-    let heard = ''
-    rec.lang = lang
-    rec.interimResults = false
-    rec.maxAlternatives = 1
-    rec.onresult = (e) => {
-      heard = e.results[0]?.[0]?.transcript ?? ''
-    }
-    rec.onerror = (e) => reject(new Error(e.error))
-    rec.onend = () => resolve(heard)
-    rec.start()
-  })
 }
 
 const pendingFetches = new Map<number, { resolve: (text: string) => void; reject: (e: Error) => void }>()

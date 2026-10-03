@@ -411,3 +411,31 @@ kbd { font: 600 0.85em var(--font); background: var(--panel); border: 1px solid 
   .row .check { opacity: 1; }
   .print-footer { display: block; text-align: right; font-size: 9px; color: #888; padding: 4px 20px; }
 }
+
+/* The journal shares planner storage, but keeps its own editor and entries. */
+.journal-open { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.journal-modal { width: min(900px, calc(100vw - 24px)); max-width: 900px; }
+.journal-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 22px; }
+.journal-list { display: flex; flex-direction: column; gap: 8px; max-height: 65vh; overflow-y: auto; }
+.journal-entry { display: flex; flex-direction: column; gap: 6px; text-align: left; border: 1px solid var(--rule); border-radius: 8px; padding: 12px; background: var(--panel); overflow-wrap: anywhere; }
+.journal-entry.selected { border-color: var(--accent); background: var(--accent-soft); }
+.journal-entry time { font-size: 0.76em; font-weight: 600; }
+.journal-entry span { font-size: 0.85em; white-space: pre-wrap; }
+.journal-editor { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.journal-editor textarea { line-height: 1.6; }
+.journal-hint { font-size: 0.8em; line-height: 1.6; margin: 0; color: var(--text); opacity: 0.78; }
+.journal-privacy { border-top: 1px solid var(--rule); padding-top: 14px; }
+.local-dictation { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--rule); background: var(--panel); padding: 14px; border-radius: 10px; }
+.local-dictation h3 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 0.9em; }
+.journal-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.journal-buttons .btn { display: inline-flex; align-items: center; gap: 6px; }
+.voice-status { font-size: 0.85em; font-weight: 600; }
+.voice-status.recording, .journal-error { color: var(--danger); }
+.recording-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: currentColor; margin-right: 6px; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+@media (max-width: 640px) {
+  .journal-layout { display: flex; flex-direction: column-reverse; gap: 18px; }
+  .journal-list { max-height: 220px; }
+  .journal-modal .modal-body { padding: 15px; }
+  .journal-open { font-size: 0.82em; }
+}

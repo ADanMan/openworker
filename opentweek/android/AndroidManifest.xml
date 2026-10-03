@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="app.opentweek">
 
+    <!-- Local dictation; INTERNET supports explicit model download and existing ICS subscriptions. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Reminders must fire on time: USE_EXACT_ALARM on Android 13+, SCHEDULE_EXACT_ALARM on 12/12L. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />

@@ -30,19 +30,23 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { ShareImportDialog } from './components/ShareImportDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { SomedayPanel } from './components/SomedayPanel'
+import { JournalDialog } from './components/JournalDialog'
+import { TaskVoiceDialog } from './components/TaskVoiceDialog'
+import { j } from './lib/journalCopy'
+import { localVoiceBridge } from './lib/localVoice'
 import { TaskModal } from './components/TaskModal'
 import { TaskRowGhost } from './components/TaskRow'
 import { Toasts } from './components/Toasts'
 import { WeekView } from './components/WeekView'
 import type { ContainerId, FeedEvent, Item, Settings, Task } from './types'
 import { focusAddLine } from './ui'
-import { fmt, fmtWeekday, getLocale, resolveLocale, setLocale, t } from './i18n'
-import { installBackButton, listen, onExternalIntent, voiceAvailable, type ExternalIntent } from './native'
+import { fmt, fmtWeekday, resolveLocale, setLocale, t } from './i18n'
+import { installBackButton, onExternalIntent, type ExternalIntent } from './native'
 import { parseQuickAdd } from './lib/quickadd'
 import { describe as describeRule } from './lib/recurrence'
 import { toast } from './hooks/toast'
 
-type Panel = 'settings' | 'search' | 'shortcuts' | null
+type Panel = 'settings' | 'search' | 'shortcuts' | 'journal' | 'voice' | null
 
 // Prefer the droppable directly under the pointer (works across columns),
 // fall back to the closest one for keyboard dragging.
@@ -118,14 +122,10 @@ function Board({ settings }: { settings: Settings }) {
     }
   }
 
-  const canVoice = useMemo(() => voiceAvailable(), [])
-  const startVoice = async () => {
-    if (!canVoice) return
-    try {
-      await quickAdd(await listen(getLocale() === 'ru' ? 'ru-RU' : 'en-US', t('voicePrompt')))
-    } catch {
-      toast(t('voiceFailed'))
-    }
+  const canVoice = !!localVoiceBridge()
+  const startVoice = () => {
+    if (document.querySelector('dialog[open]')) { toast(j('closeDialog')); return }
+    setPanel('voice')
   }
 
   // Keep the latest handlers for listeners registered once.
@@ -361,6 +361,7 @@ function Board({ settings }: { settings: Settings }) {
             </div>
           </nav>
           <div className="tools">
+            <button className="btn journal-open" onClick={() => setPanel('journal')}><Icon name="note" /> {j('journal')}</button>
             {canVoice && (
               <button className="icon-btn" aria-label={t('voiceTask')} title={`${t('voiceTask')} (V)`} onClick={startVoice}>
                 <Icon name="mic" />
@@ -413,6 +414,8 @@ function Board({ settings }: { settings: Settings }) {
         </DndContext>
 
         {openItem && <TaskModal item={openItem} lists={lists} onClose={() => setOpenKey(null)} />}
+        {panel === 'journal' && <JournalDialog onClose={() => setPanel(null)} />}
+        {panel === 'voice' && <TaskVoiceDialog onClose={() => setPanel(null)} onSubmit={quickAdd} />}
         {panel === 'settings' && <SettingsDialog settings={settings} onClose={() => setPanel(null)} />}
         {panel === 'shortcuts' && <ShortcutsDialog onClose={() => setPanel(null)} />}
         {panel === 'search' && (
