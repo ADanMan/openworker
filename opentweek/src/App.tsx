@@ -20,7 +20,7 @@ import { BoardContext, type BoardState } from './board'
 import { ensureSeed, updateSettings } from './db'
 import { useFeedSync, useReminders, useRollover, useToday } from './hooks/background'
 import { useCalendars, useFeeds, useLists, useSettings, useTasks } from './hooks/data'
-import { fromISODate, monthGrid, shift, weekDays, weekNumber } from './lib/dates'
+import { fromISODate, isoAddDays, monthGrid, shift, toISODate, weekDays, weekNumber } from './lib/dates'
 import { expand } from './lib/recurrence'
 import { decodeShare, type SharePayload } from './lib/share'
 import { Icon } from './components/Icon'
@@ -30,7 +30,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { ShareImportDialog } from './components/ShareImportDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { SomedayPanel } from './components/SomedayPanel'
-import { JournalDialog } from './components/JournalDialog'
+import { JournalPage, type JournalTarget } from './components/JournalPage'
 import { TaskVoiceDialog } from './components/TaskVoiceDialog'
 import { j } from './lib/journalCopy'
 import { localVoiceBridge } from './lib/localVoice'
@@ -46,7 +46,7 @@ import { parseQuickAdd } from './lib/quickadd'
 import { describe as describeRule } from './lib/recurrence'
 import { toast } from './hooks/toast'
 
-type Panel = 'settings' | 'search' | 'shortcuts' | 'journal' | 'voice' | null
+type Panel = 'settings' | 'search' | 'shortcuts' | 'voice' | null
 
 // Prefer the droppable directly under the pointer (works across columns),
 // fall back to the closest one for keyboard dragging.
@@ -91,6 +91,11 @@ function Board({ settings }: { settings: Settings }) {
   const calendars = useCalendars()
   const feeds = useFeeds()
   const [anchor, setAnchor] = useState(() => new Date())
+  const [mode, setMode] = useState<'calendar' | 'journal'>('calendar')
+  const [journalTarget, setJournalTarget] = useState<JournalTarget | undefined>()
+  const selectedDate = toISODate(anchor)
+  const changeDate = (date: string) => { setJournalTarget(undefined); setAnchor(fromISODate(date)) }
+  const openJournal = (date: string, target?: JournalTarget) => { setOpenKey(null); setJournalTarget(target); setAnchor(fromISODate(date)); setMode('journal') }
   const [panel, setPanel] = useState<Panel>(null)
   const [openKey, setOpenKey] = useState<{ id: string; date: string | null } | null>(null)
   const [dragging, setDragging] = useState<Item | null>(null)
@@ -124,7 +129,7 @@ function Board({ settings }: { settings: Settings }) {
 
   const canVoice = !!localVoiceBridge()
   const startVoice = () => {
-    if (document.querySelector('dialog[open]')) { toast(j('closeDialog')); return }
+    if (mode === 'journal' || document.querySelector('dialog[open]')) { toast(j('closeDialog')); return }
     setPanel('voice')
   }
 
@@ -132,7 +137,7 @@ function Board({ settings }: { settings: Settings }) {
   const intentRef = useRef<(i: ExternalIntent) => void>(() => {})
   useEffect(() => {
     intentRef.current = (i) => {
-      if (i.kind === 'task') setOpenKey({ id: i.taskId, date: i.date })
+      if (i.kind === 'task') { setMode('calendar'); setOpenKey({ id: i.taskId, date: i.date }) }
       else if (i.kind === 'voice') void startVoice()
       else if (i.kind === 'new') {
         setAnchor(new Date())
@@ -179,12 +184,12 @@ function Board({ settings }: { settings: Settings }) {
   }, [tasks, from, to, settings.hideCompleted])
 
   const eventsByDate = useMemo(() => {
-    const map = new Map<string, (FeedEvent & { color: string })[]>()
+    const map = new Map<string, (FeedEvent & { color: string; feedId: string })[]>()
     for (const feed of feeds) {
       if (!feed.enabled) continue
       for (const ev of feed.events) {
         if (ev.date < from || ev.date > to) continue
-        map.set(ev.date, [...(map.get(ev.date) ?? []), { ...ev, color: feed.color }])
+        map.set(ev.date, [...(map.get(ev.date) ?? []), { ...ev, color: feed.color, feedId: feed.id }])
       }
     }
     for (const list of map.values()) list.sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
@@ -205,6 +210,8 @@ function Board({ settings }: { settings: Settings }) {
     events: (d) => eventsByDate.get(d) ?? [],
     openItem: (item) => setOpenKey({ id: item.task.id, date: item.occurrence ? item.date : null }),
     goToDate,
+    openJournal,
+    selectedDate,
   }
 
   const openItem = useMemo((): Item | null => {
@@ -227,6 +234,7 @@ function Board({ settings }: { settings: Settings }) {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       if (target.closest('input, textarea, select, [contenteditable], dialog') || e.altKey) return
+      if (mode === 'journal') return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         return setPanel('search')
@@ -258,7 +266,7 @@ function Board({ settings }: { settings: Settings }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [view, today, settings.hideCompleted, settings.showSomeday])
+  }, [view, today, mode, settings.hideCompleted, settings.showSomeday])
 
   // Touch: horizontal swipe on the board changes week/month (ignored while dragging a task).
   const boardRef = useRef<HTMLElement>(null)
@@ -343,13 +351,13 @@ function Board({ settings }: { settings: Settings }) {
             {view === 'week' && settings.showWeekNumbers && <span className="week-badge">W{weekNumber(days[3])}</span>}
           </div>
           <nav className="nav">
-            <button className="icon-btn" aria-label={t('previous')} onClick={() => setAnchor((a) => shift(a, view, -1))}>
+            <button className="icon-btn" aria-label={t('previous')} onClick={() => changeDate(mode === 'journal' ? isoAddDays(selectedDate, -1) : toISODate(shift(anchor, view, -1)))}>
               <Icon name="left" />
             </button>
-            <button className="btn today-btn" onClick={() => setAnchor(new Date())}>
+            <button className="btn today-btn" onClick={() => changeDate(toISODate(new Date()))}>
               {t('today')}
             </button>
-            <button className="icon-btn" aria-label={t('next')} onClick={() => setAnchor((a) => shift(a, view, 1))}>
+            <button className="icon-btn" aria-label={t('next')} onClick={() => changeDate(mode === 'journal' ? isoAddDays(selectedDate, 1) : toISODate(shift(anchor, view, 1)))}>
               <Icon name="right" />
             </button>
             <div className="segmented" role="tablist">
@@ -361,7 +369,7 @@ function Board({ settings }: { settings: Settings }) {
             </div>
           </nav>
           <div className="tools">
-            <button className="btn journal-open" onClick={() => setPanel('journal')}><Icon name="note" /> {j('journal')}</button>
+            <button className="btn journal-open" aria-pressed={mode === 'journal'} onClick={() => setMode(mode === 'journal' ? 'calendar' : 'journal')}><Icon name="note" /> {mode === 'journal' ? 'Календарь' : j('journal')}</button>
             {canVoice && (
               <button className="icon-btn" aria-label={t('voiceTask')} title={`${t('voiceTask')} (V)`} onClick={startVoice}>
                 <Icon name="mic" />
@@ -390,7 +398,14 @@ function Board({ settings }: { settings: Settings }) {
           </div>
         </header>
 
-        <DndContext
+        <div className="mode-bar" aria-label="Режим приложения">
+          <button className={`btn${mode === 'calendar' ? ' primary' : ''}`} aria-pressed={mode === 'calendar'} onClick={() => setMode('calendar')}>Календарь</button>
+          <button className={`btn${mode === 'journal' ? ' primary' : ''}`} aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}>Дневник</button>
+          <label>Общая дата <input type="date" aria-label="Общая дата" value={selectedDate} onChange={(e) => e.target.value && changeDate(e.target.value)} /></label>
+        </div>
+        {mode === 'journal' ? <JournalPage key={`${selectedDate}:${JSON.stringify(journalTarget)}`} date={selectedDate} calendarId={calendarId} target={journalTarget} onDate={changeDate}
+          onOpenTask={async (task, date) => { await updateSettings({ activeCalendarId: task.calendarId }); setAnchor(fromISODate(date ?? task.date ?? selectedDate)); setMode('calendar'); setOpenKey({ id: task.id, date }) }}
+          onOpenFeed={(date) => { changeDate(date); setMode('calendar') }} /> : <DndContext
           sensors={sensors}
           collisionDetection={collision}
           onDragStart={onDragStart}
@@ -411,10 +426,9 @@ function Board({ settings }: { settings: Settings }) {
             {settings.showSomeday && <SomedayPanel lists={lists} />}
           </section>
           <DragOverlay dropAnimation={null}>{dragging && <TaskRowGhost item={dragging} />}</DragOverlay>
-        </DndContext>
+        </DndContext>}
 
-        {openItem && <TaskModal item={openItem} lists={lists} onClose={() => setOpenKey(null)} />}
-        {panel === 'journal' && <JournalDialog onClose={() => setPanel(null)} />}
+        {openItem && <TaskModal item={openItem} lists={lists} onClose={() => setOpenKey(null)} onOpenJournal={() => openJournal(openItem.date ?? selectedDate, { taskId: openItem.task.id, occurrenceDate: openItem.occurrence ? openItem.date : null })} />}
         {panel === 'voice' && <TaskVoiceDialog onClose={() => setPanel(null)} onSubmit={quickAdd} />}
         {panel === 'settings' && <SettingsDialog settings={settings} onClose={() => setPanel(null)} />}
         {panel === 'shortcuts' && <ShortcutsDialog onClose={() => setPanel(null)} />}

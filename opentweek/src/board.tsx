@@ -1,3 +1,4 @@
+import type { JournalTarget } from './components/JournalPage'
 import { createContext, useContext } from 'react'
 import type { ContainerId, FeedEvent, Item, Settings } from './types'
 
@@ -7,8 +8,10 @@ export interface BoardState {
   today: string
   overContainer: ContainerId | null
   items: (c: ContainerId) => Item[]
-  events: (date: string) => (FeedEvent & { color: string })[]
+  events: (date: string) => (FeedEvent & { color: string; feedId: string })[]
   openItem: (item: Item) => void
+  selectedDate: string
+  openJournal: (date: string, target?: JournalTarget) => void
   goToDate: (date: string, view?: Settings['view']) => void
 }
 

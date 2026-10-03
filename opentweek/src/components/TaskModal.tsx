@@ -1,3 +1,4 @@
+import { toISODate } from '../lib/dates'
 import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { detachOccurrence, duplicateTask, skipOccurrence, toggleDone, updateTask } from '../actions'
@@ -38,7 +39,7 @@ function AttachmentLink({ blob, name }: { blob: Blob; name: string }) {
   )
 }
 
-export function TaskModal({ item, lists, onClose }: { item: Item; lists: SomedayList[]; onClose: () => void }) {
+export function TaskModal({ item, lists, onClose, onOpenJournal }: { item: Item; lists: SomedayList[]; onClose: () => void; onOpenJournal?: () => void }) {
   const { task } = item
   const dialog = useRef<HTMLDialogElement>(null)
   const [newSub, setNewSub] = useState('')
@@ -95,6 +96,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
           </div>
         )}
 
+        {onOpenJournal && <button className="btn task-journal-open" onClick={onOpenJournal}>Открыть дневник события</button>}
         <div className="field-row">
           <label className="field">
             <span>{t('when')}</span>
@@ -102,7 +104,7 @@ export function TaskModal({ item, lists, onClose }: { item: Item; lists: Someday
               value={where}
               onChange={(e) => {
                 const v = e.target.value
-                if (v === 'day') set({ date: item.date ?? new Date().toISOString().slice(0, 10), listId: null })
+                if (v === 'day') set({ date: item.date ?? toISODate(new Date()), listId: null })
                 else set({ date: null, listId: v.slice(5), rrule: null, reminder: null })
               }}
             >

@@ -35,8 +35,10 @@ jobs:
       - run: ./android/build.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: opentweek-local-debug
+          name: opentweek-preview-debug
           path: |
-            opentweek/android/build-local/*-local-debug.apk
-            opentweek/android/build-local/*-local-debug.apk.sha256
+            opentweek/android/artifacts/*/*-preview-debug.apk
+            opentweek/android/artifacts/*/*-preview-debug.apk.sha256
+            opentweek/android/artifacts/*/manifest.json
+          if-no-files-found: error
           retention-days: 14

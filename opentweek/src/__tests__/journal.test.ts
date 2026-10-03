@@ -34,3 +34,22 @@ it('allows leap dates and bounded text with no mood', async () => {
   const entry = await saveJournalEntry({ ...draft, date: '2024-02-29', mood: null, text: 'x'.repeat(JOURNAL_TEXT_MAX_LENGTH) }, database)
   expect(entry.mood).toBeNull()
 })
+
+it('migrates v2 entries to empty structured fields without changing content', async () => {
+  const old = new Dexie(database.name)
+  old.version(2).stores({ tasks: 'id, calendarId, date, listId, updatedAt', lists: 'id, calendarId, order', calendars: 'id, order', feeds: 'id', kv: 'key', journalEntries: 'id, date, updatedAt' })
+  await old.table('journalEntries').put({ ...draft, createdAt: 1, updatedAt: 2 })
+  old.close()
+  await database.open()
+  expect(await database.journalEntries.get(draft.id)).toMatchObject({ text: draft.text, thoughts: '', taskId: null, occurrenceDate: null, createdAt: 1 })
+  expect(await database.journalDrafts.count()).toBe(0)
+})
+it('persists empty drafts and saves structured-only entries atomically', async () => {
+  const { saveJournalDraft, hasJournalContent } = await import('../lib/journal')
+  await saveJournalDraft({ ...draft, text: '' }, database)
+  expect(await database.journalDrafts.count()).toBe(1)
+  expect(hasJournalContent({ ...draft, text: '', thoughts: '  ' })).toBe(false)
+  await saveJournalEntry({ ...draft, text: '', thoughts: ' New thought ', needs: 'Rest' }, database)
+  expect(await database.journalDrafts.count()).toBe(0)
+  expect(await database.journalEntries.get(draft.id)).toMatchObject({ text: '', thoughts: 'New thought', needs: 'Rest' })
+})

@@ -1,4 +1,6 @@
 import { db, uid } from './db'
+import { updateJournalLinks } from './lib/journal'
+import { occurrences } from './lib/recurrence'
 import type { QuickAdd } from './lib/quickadd'
 import type { ContainerId, Item, SomedayList, Task } from './types'
 
@@ -58,7 +60,22 @@ export async function addQuickTask(calendarId: string, q: QuickAdd) {
 }
 
 export async function updateTask(id: string, patch: Partial<Task>) {
-  await db.tasks.update(id, { ...patch, updatedAt: Date.now() })
+  await db.transaction('rw', [db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    const task = await db.tasks.get(id)
+    await db.tasks.update(id, { ...patch, updatedAt: Date.now() })
+    if (task && !task.rrule && patch.date) await updateJournalLinks(id, { date: patch.date })
+    if (task && !task.rrule && patch.rrule) {
+      const updated = { ...task, ...patch }
+      const occurrenceDate = updated.date
+      const valid = occurrenceDate && occurrences(updated, occurrenceDate, occurrenceDate).length > 0
+      await updateJournalLinks(id, valid ? { occurrenceDate, date: occurrenceDate } : { taskId: null, occurrenceDate: null })
+    }
+    if (patch.exdates) for (const date of patch.exdates) await updateJournalLinks(id, { taskId: null, occurrenceDate: null }, date)
+    if (task?.rrule && (patch.rrule !== undefined || patch.date !== undefined)) {
+      const updated = { ...task, ...patch }
+      for (const table of [db.journalEntries, db.journalDrafts]) await table.where('taskId').equals(id).filter(row => !row.occurrenceDate || !occurrences(updated, row.occurrenceDate, row.occurrenceDate).length).modify({ taskId: null, occurrenceDate: null })
+    }
+  })
 }
 
 export async function toggleDone(item: Item) {
@@ -73,14 +90,44 @@ export async function toggleDone(item: Item) {
   }
 }
 
+// Undo metadata stays in memory, never on planner records or in exports.
+const deletedTaskLinks = new Map<string, { saved: { id: string; occurrenceDate: string | null; detached: string }[]; drafts: { id: string; occurrenceDate: string | null; detached: string }[] }>()
+
 export async function deleteTask(id: string): Promise<Task | undefined> {
-  const task = await db.tasks.get(id)
-  await db.tasks.delete(id)
+  const undo = { saved: [] as { id: string; occurrenceDate: string | null; detached: string }[], drafts: [] as { id: string; occurrenceDate: string | null; detached: string }[] }
+  const task = await db.transaction('rw', [db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    const task = await db.tasks.get(id)
+    const saved = await db.journalEntries.where('taskId').equals(id).toArray()
+    const drafts = await db.journalDrafts.where('taskId').equals(id).toArray()
+    await updateJournalLinks(id, { taskId: null, occurrenceDate: null })
+    for (const [rows, table, target] of [[saved, db.journalEntries, undo.saved], [drafts, db.journalDrafts, undo.drafts]] as const) {
+      for (const row of rows) target.push({ id: row.id, occurrenceDate: row.occurrenceDate ?? null, detached: JSON.stringify(await table.get(row.id)) })
+    }
+    await db.tasks.delete(id)
+    return task
+  })
+  if (task) {
+    deletedTaskLinks.set(id, undo)
+    // Bound temporary undo history even if a caller never restores tasks.
+    if (deletedTaskLinks.size > 100) deletedTaskLinks.delete(deletedTaskLinks.keys().next().value!)
+  }
   return task
 }
 
 export async function restoreTask(task: Task) {
-  await db.tasks.put(task)
+  const undo = deletedTaskLinks.get(task.id)
+  await db.transaction('rw', [db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    await db.tasks.put(task)
+    if (!undo) return
+    for (const [rows, table] of [[undo.saved, db.journalEntries], [undo.drafts, db.journalDrafts]] as const) {
+      for (const row of rows) {
+        const current = await table.get(row.id)
+        // Do not relink notes edited, deleted, or reassigned since removal.
+        if (current && JSON.stringify(current) === row.detached) await table.update(row.id, { taskId: task.id, occurrenceDate: row.occurrenceDate, updatedAt: Date.now() })
+      }
+    }
+  })
+  deletedTaskLinks.delete(task.id)
 }
 
 export async function skipOccurrence(item: Item) {
@@ -102,7 +149,8 @@ export async function detachOccurrence(item: Item, target: { date: string | null
     listId: target.listId,
     createdAt: Date.now(),
   })
-  await db.transaction('rw', db.tasks, async () => {
+  await db.transaction('rw', [db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    await updateJournalLinks(task.id, { taskId: copy.id, occurrenceDate: null, ...(target.date ? { date: target.date } : {}) }, item.date!)
     await db.tasks.update(task.id, {
       exdates: [...task.exdates, item.date!],
       doneDates: task.doneDates.filter((d) => d !== item.date),
@@ -192,8 +240,11 @@ export async function rollover(calendarId: string, today: string) {
     .filter((t) => t.calendarId === calendarId && !t.done && !t.rrule)
     .toArray()
   if (!stale.length) return 0
-  await db.transaction('rw', db.tasks, async () => {
-    await Promise.all(stale.map((t, i) => db.tasks.update(t.id, { date: today, order: -stale.length + i })))
+  await db.transaction('rw', [db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    await Promise.all(stale.map(async (t, i) => {
+      await db.tasks.update(t.id, { date: today, order: -stale.length + i })
+      await updateJournalLinks(t.id, { date: today })
+    }))
   })
   return stale.length
 }
@@ -211,14 +262,16 @@ export async function addList(calendarId: string, name = 'New list') {
 }
 
 export async function deleteList(id: string) {
-  await db.transaction('rw', db.lists, db.tasks, async () => {
+  await db.transaction('rw', [db.lists, db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    for (const task of await db.tasks.where('listId').equals(id).toArray()) await updateJournalLinks(task.id, { taskId: null, occurrenceDate: null })
     await db.tasks.where('listId').equals(id).delete()
     await db.lists.delete(id)
   })
 }
 
 export async function deleteCalendar(id: string) {
-  await db.transaction('rw', db.calendars, db.lists, db.tasks, async () => {
+  await db.transaction('rw', [db.calendars, db.lists, db.tasks, db.journalEntries, db.journalDrafts], async () => {
+    for (const task of await db.tasks.where('calendarId').equals(id).toArray()) await updateJournalLinks(task.id, { taskId: null, occurrenceDate: null })
     await db.tasks.where('calendarId').equals(id).delete()
     await db.lists.where('calendarId').equals(id).delete()
     await db.calendars.delete(id)
