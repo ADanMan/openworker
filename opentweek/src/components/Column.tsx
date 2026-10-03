@@ -57,11 +57,12 @@ export function Column({
   return (
     <section ref={setNodeRef} className={`column ${className}${board.overContainer === container ? ' over' : ''}`}>
       {header}
+      {date && <button className="day-journal" aria-label={`Дневник за ${date}`} onClick={() => board.openJournal(date)}>Дневник</button>}
       <div className="lines">
         {events.map((ev) => (
           <div key={ev.uid} className={`event color-${ev.color}`} title={ev.location ?? undefined}>
             {ev.time && <span className="event-time">{ev.time}</span>}
-            <span className="title">{ev.title}</span>
+            <button className="title event-journal" title="Открыть дневник события" onClick={() => board.openJournal(date!, { feedId: ev.feedId, eventUid: ev.uid, occurrenceDate: date })}>{ev.title}</button>
           </div>
         ))}
         <SortableContext items={items.map((i) => i.key)} strategy={verticalListSortingStrategy}>

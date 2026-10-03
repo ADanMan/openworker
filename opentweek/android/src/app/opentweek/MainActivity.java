@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.speech.RecognizerIntent;
 import android.util.Base64;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -20,7 +19,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.HashMap;
 
 import org.json.JSONObject;
@@ -36,11 +34,11 @@ public class MainActivity extends Activity {
     static final int REQ_FILE = 1;
     static final int REQ_SAVE = 2;
     static final int REQ_NOTIFICATIONS = 3;
-    static final int REQ_VOICE = 4;
     static final String ACTION_VOICE = "app.opentweek.action.VOICE";
     static final String ACTION_NEW = "app.opentweek.action.NEW";
 
     WebView web;
+    LocalVoice localVoice;
     private ValueCallback<Uri[]> fileCallback;
     private byte[] pendingSave;
     /** Pending external intent as JSON for the page (see NativeBridge.takeIntent); "" if none. */
@@ -60,13 +58,18 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setMediaPlaybackRequiresUserGesture(true);
+        localVoice = new LocalVoice(this);
         web.addJavascriptInterface(new NativeBridge(this), "OpenTweekNative");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
-                if (!HOST.equals(url.getHost())) return null;
+                // Javascript interfaces are exposed to frames: forbid remote frame/resource
+                // loading so only packaged code can call the native microphone bridge.
+                if (!"https".equals(url.getScheme()) || !HOST.equals(url.getHost()))
+                    return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden",
+                        new HashMap<String, String>(), new ByteArrayInputStream(new byte[0]));
                 return serveAsset(url.getPath());
             }
 
@@ -75,7 +78,7 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String link) {
                 Uri url = Uri.parse(link);
-                if (HOST.equals(url.getHost())) return false;
+                if ("https".equals(url.getScheme()) && HOST.equals(url.getHost())) return false;
                 // Links to the outside world open in the user's browser.
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, url));
@@ -156,28 +159,24 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Legacy system recognition is disabled: it may upload speech to a provider.
     void startVoice(final String lang, final String prompt) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-                i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                if (lang != null && !lang.isEmpty()) i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
-                if (prompt != null && !prompt.isEmpty()) i.putExtra(RecognizerIntent.EXTRA_PROMPT, prompt);
-                i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
-                try {
-                    startActivityForResult(i, REQ_VOICE);
-                } catch (Exception e) {
-                    js("window.__otVoice && window.__otVoice(false," + JSONObject.quote("unavailable") + ")");
-                }
-            }
-        });
+        js("window.__otVoice && window.__otVoice(false,\"unavailable\")");
     }
 
-    boolean voiceAvailable() {
-        return !getPackageManager()
-                .queryIntentActivities(new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0)
-                .isEmpty();
+    boolean voiceAvailable() { return false; }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (localVoice != null) localVoice.foreground(true);
+    }
+    @Override protected void onStop() {
+        if (localVoice != null) localVoice.foreground(false);
+        super.onStop();
+    }
+    @Override protected void onDestroy() {
+        if (localVoice != null) localVoice.close();
+        super.onDestroy();
     }
 
     private static final HashMap<String, String> MIME = new HashMap<String, String>();
@@ -206,6 +205,7 @@ public class MainActivity extends Activity {
             WebResourceResponse res = new WebResourceResponse(mime, "UTF-8", in);
             HashMap<String, String> headers = new HashMap<String, String>();
             headers.put("Cache-Control", "no-cache");
+            headers.put("Content-Security-Policy", "frame-src 'none'; object-src 'none'; base-uri 'self'");
             res.setResponseHeaders(headers);
             return res;
         } catch (IOException e) {
@@ -269,22 +269,17 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
-        if (code == REQ_NOTIFICATIONS) {
+        super.onRequestPermissionsResult(code, permissions, results);
+        if (code == LocalVoice.PERMISSION) {
+            localVoice.permissionResult(results.length > 0 && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED);
+        } else if (code == REQ_NOTIFICATIONS) {
             js("window.__otNotifResult && window.__otNotifResult(" + Reminders.notificationsAllowed(this) + ")");
         }
     }
 
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
-        if (code == REQ_VOICE) {
-            String heard = "";
-            if (result == RESULT_OK && data != null) {
-                ArrayList<String> matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-                if (matches != null && !matches.isEmpty()) heard = matches.get(0);
-            }
-            // Cancelled or silent: resolve with "" so the page simply does nothing.
-            js("window.__otVoice && window.__otVoice(true," + JSONObject.quote(heard) + ")");
-        } else if (code == REQ_FILE) {
+        if (code == REQ_FILE) {
             if (fileCallback != null) {
                 fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
                 fileCallback = null;

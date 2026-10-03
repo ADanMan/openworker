@@ -133,3 +133,33 @@ export interface Item {
 }
 
 export type ContainerId = `day:${string}` | `list:${string}`
+
+export type JournalContext = 'work' | 'relationships' | 'rest' | 'change' | 'other'
+
+export interface JournalFields {
+  thoughts?: string
+  feelings?: string
+  body?: string
+  perspective?: string
+  action?: string
+  after?: string
+  needs?: string
+  context?: JournalContext | null
+  feedId?: string | null
+  eventUid?: string | null
+  taskId?: string | null
+  occurrenceDate?: string | null
+}
+
+export interface JournalEntry extends JournalFields {
+  id: string
+  date: string
+  text: string
+  mood: 1 | 2 | 3 | 4 | 5 | null
+  createdAt: number
+  updatedAt: number
+}
+
+export type JournalDraft = Pick<JournalEntry, 'id' | 'date' | 'text' | 'mood'> & JournalFields
+
+export const JOURNAL_EMPTY_FIELDS = { thoughts: '', feelings: '', body: '', perspective: '', action: '', after: '', needs: '', context: null, feedId: null, eventUid: null, taskId: null, occurrenceDate: null } as const

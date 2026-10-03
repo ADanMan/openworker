@@ -1,5 +1,7 @@
 # opentweek
 
+> **1.2.0: локальный дневник и русская диктовка Android.** Новый SDK/JNI build, отдельная debug-подпись и ограничения описаны в [инструкции](docs/44-local-journal.md). Старый API23 build больше не используется.
+
 An open-source, local-first weekly planner inspired by [Tweek](https://tweek.so). The goal is the same calm "paper week" UX, with every Tweek Premium feature included and free.
 
 - **No account, no server.** Your data lives in your browser's IndexedDB and works offline as an installable PWA.

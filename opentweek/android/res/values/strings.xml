@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">opentweek</string>
+    <string name="app_name">OpenTweek Preview</string>
     <string name="channel_reminders">Reminders</string>
     <string name="saved">Saved</string>
     <string name="save_failed">Could not save the file</string>

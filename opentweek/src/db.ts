@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { t } from './i18n'
-import type { Calendar, Feed, Settings, SomedayList, Task } from './types'
+import { JOURNAL_EMPTY_FIELDS } from './types'
+import type { Calendar, Feed, JournalEntry, Settings, SomedayList, Task } from './types'
 
 interface KV {
   key: string
@@ -8,6 +9,8 @@ interface KV {
 }
 
 export class OpenTweekDB extends Dexie {
+  journalEntries!: EntityTable<JournalEntry, 'id'>
+  journalDrafts!: EntityTable<JournalEntry, 'id'>
   tasks!: EntityTable<Task, 'id'>
   lists!: EntityTable<SomedayList, 'id'>
   calendars!: EntityTable<Calendar, 'id'>
@@ -22,6 +25,12 @@ export class OpenTweekDB extends Dexie {
       calendars: 'id, order',
       feeds: 'id',
       kv: 'key',
+    })
+    this.version(2).stores({ journalEntries: 'id, date, updatedAt' })
+    this.version(3).stores({ journalEntries: 'id, date, taskId, updatedAt', journalDrafts: 'id, date, taskId, updatedAt' }).upgrade(async tx => {
+      await tx.table('journalEntries').toCollection().modify(row => {
+        for (const [key, value] of Object.entries(JOURNAL_EMPTY_FIELDS)) if (row[key] === undefined) row[key] = value
+      })
     })
   }
 }
