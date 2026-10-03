@@ -142,6 +142,7 @@ export function installBackButton() {
 export type ExternalIntent =
   | { kind: 'task'; taskId: string; date: string | null } // tap on a reminder
   | { kind: 'voice' } // launcher shortcut "Voice task"
+  | { kind: 'wakeRecovery' } // explicit tap on the private dictation result notification
   | { kind: 'new' } // launcher shortcut "New task"
   | { kind: 'text'; text: string } // text shared from another app
 

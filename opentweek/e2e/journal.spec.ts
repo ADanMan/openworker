@@ -269,3 +269,76 @@ test('desktop guided journal fits the viewport', async ({ page }) => {
   expect(await page.locator('body').evaluate(el => el.scrollWidth <= window.innerWidth)).toBe(true)
   await page.screenshot({ path: 'test-results/journal-desktop.png', fullPage: true })
 })
+
+async function wakeNative(page: Page, active = false) {
+  await native(page)
+  await page.addInitScript((restore) => {
+    const w = window as any
+    w.__wakePending = null
+    w.OpenTweekNative.localVoiceStatus = () => JSON.stringify({ supported: true, modelReady: true, wakeSupported: true, wakeSessionId: restore ? 'existing-wake' : '', wakeState: restore ? 'waiting' : '' })
+    w.OpenTweekNative.startLocalWake = (id: string) => { w.__voiceId = id; w.__voiceCalls.push('wake'); w.__otLocalVoice({ sessionId: id, state: 'waiting' }) }
+    w.OpenTweekNative.localWakeRecovery = () => JSON.stringify(w.__wakePending)
+    w.OpenTweekNative.clearLocalWakeRecovery = (id: string) => { if (w.__wakePending?.sessionId === id) { w.__voiceCalls.push('ackWake'); w.__wakePending = null; return true } return false }
+  }, active)
+}
+
+test('wake opt-in waits then offers a private transcript for explicit insertion', async ({ page }) => {
+  await wakeNative(page); await open(page)
+  await page.getByText('Эксперимент: «эй, Твик»', { exact: true }).click()
+  const start = page.getByRole('button', { name: 'Ждать фразу «эй, Твик»', exact: true })
+  await expect(start).toBeDisabled()
+  expect(await page.evaluate(() => (window as any).__voiceCalls)).toEqual([])
+  await page.getByRole('checkbox', { name: 'Разрешить экспериментальное распознавание фразы в этом сеансе' }).check()
+  await start.click()
+  await expect(page.locator('.voice-status')).toContainText('Микрофон включён · ждём')
+  await expect(page.getByRole('button', { name: 'Сохранить запись' })).toBeDisabled()
+  await event(page, 'recording')
+  await expect(page.locator('.voice-status')).toContainText('Идёт запись')
+  await page.evaluate(() => { const w = window as any; w.__wakePending = { sessionId: w.__voiceId, text: 'Проверить и сохранить', createdAt: Date.now() }; w.__otLocalVoice({ sessionId: w.__voiceId, state: 'wake_result' }) })
+  await expect(page.getByRole('region', { name: 'Проверьте фоновую диктовку' })).toBeVisible()
+  await expect(page.getByLabel('Что у вас на душе?')).toHaveValue('')
+  expect(await count(page)).toBe(0)
+  await page.getByRole('button', { name: 'Вставить в выбранный раздел' }).click()
+  await expect(page.getByLabel('Что у вас на душе?')).toHaveValue('Проверить и сохранить')
+  await expect.poll(() => count(page, 'journalDrafts')).toBe(1)
+  expect(await page.evaluate(() => (window as any).__voiceCalls)).toEqual(['wake', 'ackWake'])
+  expect(await count(page)).toBe(0)
+})
+
+test('wake cancellation and mode switch reject late activation and never rearm', async ({ page }) => {
+  await wakeNative(page); await open(page)
+  await page.getByText('Эксперимент: «эй, Твик»', { exact: true }).click()
+  await page.getByRole('checkbox', { name: 'Разрешить экспериментальное распознавание фразы в этом сеансе' }).check()
+  await page.getByRole('button', { name: 'Ждать фразу «эй, Твик»' }).click()
+  await page.getByRole('button', { name: 'Прекратить ожидание' }).click()
+  await event(page, 'recording'); await event(page, 'result', 'Late result')
+  await expect(page.getByLabel('Что у вас на душе?')).toHaveValue('')
+  await page.getByRole('button', { name: 'Ждать фразу «эй, Твик»' }).click()
+  await page.locator('.mode-bar').getByRole('button', { name: 'Календарь', exact: true }).click()
+  expect(await page.evaluate(() => (window as any).__voiceCalls)).toEqual(['wake', 'cancel', 'wake', 'cancel'])
+})
+
+test('recreated editor shows the running wake service and can stop it', async ({ page }) => {
+  await wakeNative(page, true); await open(page)
+  await expect(page.locator('.voice-status')).toContainText('Микрофон включён · ждём')
+  expect(await page.evaluate(() => (window as any).__voiceCalls)).toEqual([])
+  await page.getByRole('button', { name: 'Прекратить ожидание' }).click()
+  expect(await page.evaluate(() => (window as any).__voiceCalls)).toEqual(['cancel'])
+})
+
+test('failed recovery acknowledgement survives editor recreation without duplicate text', async ({ page }) => {
+  await wakeNative(page); await open(page)
+  await page.evaluate(() => { const w = window as any; w.__wakePending = { sessionId: 'recovery-once', text: 'Один раз', createdAt: Date.now() }; w.OpenTweekNative.clearLocalWakeRecovery = () => false })
+  await expect(page.getByRole('region', { name: 'Проверьте фоновую диктовку' })).toBeVisible()
+  await page.getByRole('button', { name: 'Вставить в выбранный раздел' }).click()
+  await expect(page.getByLabel('Что у вас на душе?')).toHaveValue('Один раз')
+  await expect(page.getByRole('region', { name: 'Проверьте фоновую диктовку' }).getByRole('alert')).toBeVisible()
+  await page.locator('.mode-bar').getByRole('button', { name: 'Календарь', exact: true }).click()
+  await page.locator('.mode-bar').getByRole('button', { name: 'Дневник', exact: true }).click()
+  await expect(page.getByLabel('Что у вас на душе?')).toHaveValue('Один раз')
+  await page.evaluate(() => { const w = window as any; w.OpenTweekNative.clearLocalWakeRecovery = (id: string) => { if (w.__wakePending?.sessionId === id) { w.__wakePending = null; return true } return false } })
+  await page.getByRole('button', { name: 'Вставить в выбранный раздел' }).click()
+  await expect(page.getByRole('region', { name: 'Проверьте фоновую диктовку' })).toHaveCount(0)
+  await expect(page.getByLabel('Что у вас на душе?')).toHaveValue('Один раз')
+  expect(await count(page, 'journalDrafts')).toBe(1)
+})

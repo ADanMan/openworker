@@ -4,6 +4,8 @@ import { db, uid } from '../db'
 import { deleteJournalDraft, deleteJournalEntry, hasJournalContent, JOURNAL_TEXT_MAX_LENGTH, saveJournalDraft, saveJournalEntry, type JournalDraft } from '../lib/journal'
 import { CONTEXTS, getGuidance, JOURNAL_FIELDS } from '../lib/journalGuidance'
 import { j } from '../lib/journalCopy'
+import { insertWakeDraft } from '../lib/journalWake'
+import { JOURNAL_CONTENT_FIELDS } from '../lib/journal'
 import { expand } from '../lib/recurrence'
 import type { Feed, JournalEntry, Task } from '../types'
 import { LocalDictation } from './LocalDictation'
@@ -97,7 +99,7 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
   const [error, setError] = useState('')
   const [guided, setGuided] = useState(false)
   const [voiceField, setVoiceField] = useState('text')
-  const queue = useRef(Promise.resolve())
+  const queue = useRef<Promise<boolean>>(Promise.resolve(true))
   const operation = useRef(false)
   const writeRevision = useRef(0)
   const task = tasks.find((t) => t.id === draft.taskId)
@@ -108,10 +110,11 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
   const change = (next: JournalDraft) => {
     latest.current = next; setDraft(next); setError(''); setStatus('Сохраняем черновик…')
     const rev = ++writeRevision.current
-    queue.current = queue.current.catch(() => {}).then(async () => {
-      try { await saveJournalDraft(next); if (rev === writeRevision.current) setStatus('Черновик сохранён на устройстве') }
-      catch { if (rev === writeRevision.current) setError('Не удалось сохранить черновик. Не закрывайте страницу; попробуйте сохранить запись.') }
+    queue.current = queue.current.catch(() => false).then(async () => {
+      try { await saveJournalDraft(next); if (rev === writeRevision.current) setStatus('Черновик сохранён на устройстве'); return true }
+      catch { if (rev === writeRevision.current) setError('Не удалось сохранить черновик. Не закрывайте страницу; попробуйте сохранить запись.'); return false }
     })
+    return queue.current
   }
   const save = async () => {
     if (busy || operation.current || !hasJournalContent(latest.current)) return
@@ -140,7 +143,16 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
   const append = (key: string, text: string) => {
     const current = latest.current
     const old = current[key as keyof JournalDraft]
-    change({ ...current, [key]: [typeof old === 'string' ? old.trimEnd() : '', text].filter(Boolean).join('\n').slice(0, JOURNAL_TEXT_MAX_LENGTH) })
+    const combined = [typeof old === 'string' ? old.trimEnd() : '', text].filter(Boolean).join('\n')
+    if (combined.length > JOURNAL_TEXT_MAX_LENGTH) { setError('В разделе слишком много текста. Выберите другой раздел или сократите его перед вставкой.'); return Promise.resolve(false) }
+    return change({ ...current, [key]: combined })
+  }
+  const recover = async (text: string, sessionId: string) => {
+    await queue.current
+    const entry = await insertWakeDraft(latest.current, voiceField as typeof JOURNAL_CONTENT_FIELDS[number], text, sessionId)
+    if (entry) { latest.current = entry; setDraft(entry) }
+    setStatus(entry ? 'Диктовка добавлена в локальный черновик' : 'Эта диктовка уже вставлена. Повторное подтверждение не меняет текст.');
+    if (entry) setError('')
   }
   return <section className="journal-editor" aria-label="Редактор дневника">
     {(draft.taskId || draft.feedId) && <div className="journal-link">
@@ -176,7 +188,7 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
     <label className="field"><span>Куда вставить диктовку</span><select value={voiceField} disabled={busy || saving} onChange={(e) => setVoiceField(e.target.value)}>
       <option value="text">Ситуация / свободная запись</option>{JOURNAL_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
     </select></label>
-    <LocalDictation onBusy={setBusy} onText={(text) => append(voiceField, text)} />
+    <LocalDictation allowWake onBusy={setBusy} onText={(text) => append(voiceField, text)} onRecoveredText={recover} />
     <p className="journal-hint">Автосохранение сохраняет только черновик. «Сохранить запись» завершает его. Переключение режима остановит микрофон.</p>
     {error && <p className="journal-error" role="alert">{error}</p>}{status && <p className="journal-save-status" role="status">{status}</p>}
     <div className="modal-actions">

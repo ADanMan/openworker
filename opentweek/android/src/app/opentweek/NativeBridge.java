@@ -83,6 +83,9 @@ public class NativeBridge {
     @JavascriptInterface public void downloadLocalVoiceModel() { activity.localVoice.download(); }
     @JavascriptInterface public void cancelLocalVoiceDownload() { activity.localVoice.cancelDownload(); }
     @JavascriptInterface public void startLocalVoice(String sessionId) { activity.localVoice.start(sessionId); }
+    @JavascriptInterface public void startLocalWake(String sessionId) { activity.localVoice.startWake(sessionId); }
+    @JavascriptInterface public String localWakeRecovery() { return LocalWakeService.recovery(activity.getApplicationContext()); }
+    @JavascriptInterface public boolean clearLocalWakeRecovery(String sessionId) { return LocalWakeService.clearRecovery(activity.getApplicationContext(), sessionId); }
     @JavascriptInterface public void stopLocalVoice(String sessionId) { activity.localVoice.stop(sessionId); }
     @JavascriptInterface public void cancelLocalVoice(String sessionId) { activity.localVoice.cancel(sessionId); }
 

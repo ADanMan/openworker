@@ -1,5 +1,7 @@
 # Local journal, linked calendar and Russian dictation — 1.3.0 Preview
 
+This page documents 1.3.0. Preview 1.4.0 adds an optional background wake experiment: [conditions and validation](45-experimental-wake.md).
+
 ## Calendar and journal
 
 The Calendar and Journal modes share a selected local calendar date (not a UTC timestamp). Each day and task editor can open its journal. Entries link to tasks by `taskId`; recurring items also carry `occurrenceDate`. Titles resolve from the task, never from a duplicated journal snapshot. Opening a linked entry returns to the task's current calendar/date.
