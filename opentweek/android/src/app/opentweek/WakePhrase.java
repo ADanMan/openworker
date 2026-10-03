@@ -8,11 +8,13 @@ final class WakePhrase {
     enum State { WAITING, RECORDING, DONE }
     private volatile State state = State.WAITING;
     private final long started;
+    private final long waitLimit;
     private boolean timedOut;
-    WakePhrase(long started) { this.started = started; }
+    WakePhrase(long started) { this(started, WAIT_LIMIT_MS); }
+    WakePhrase(long started, long waitLimit) { this.started = started; this.waitLimit = Math.max(1, waitLimit); }
     State state() { return state; }
     boolean expired(long now) {
-        if (state == State.WAITING && now - started >= WAIT_LIMIT_MS) { state = State.DONE; timedOut = true; return true; }
+        if (state == State.WAITING && now - started >= waitLimit) { state = State.DONE; timedOut = true; return true; }
         return timedOut;
     }
     boolean recognized(String text, String verifiedText, boolean finalized, long now) {

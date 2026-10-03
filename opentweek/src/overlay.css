@@ -1,0 +1,12 @@
+:root { font-family:system-ui,sans-serif; color:#17191f; background:white; color-scheme:light; }
+body { margin:0; }
+main { padding:12px; }
+h1 { font-size:17px; margin:0 0 10px; }
+p { font-size:12px; line-height:1.4; margin:8px 0; }
+label { display:block; font-size:13px; margin:8px 0; }
+input,textarea { display:block; box-sizing:border-box; width:100%; font:inherit; font-size:16px; padding:8px; border:1px solid #abb0ba; border-radius:7px; margin-top:3px; }
+textarea { resize:vertical; min-height:72px; }
+button { background:#2f6cf6; color:white; border:0; border-radius:7px; padding:10px; font:inherit; font-size:14px; margin:4px 6px 4px 0; cursor:pointer; }
+button.secondary { color:#20232a; background:#eff1f5; }
+button:disabled { opacity:.5; cursor:default; }
+.error { color:#a11931; }

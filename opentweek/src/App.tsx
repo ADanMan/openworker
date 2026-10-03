@@ -31,6 +31,7 @@ import { ShareImportDialog } from './components/ShareImportDialog'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { SomedayPanel } from './components/SomedayPanel'
 import { JournalPage, type JournalTarget } from './components/JournalPage'
+import { BackgroundVoiceMode } from './components/BackgroundVoiceMode'
 import { TaskVoiceDialog } from './components/TaskVoiceDialog'
 import { j } from './lib/journalCopy'
 import { localVoiceBridge } from './lib/localVoice'
@@ -406,6 +407,7 @@ function Board({ settings }: { settings: Settings }) {
           <button className={`btn${mode === 'journal' ? ' primary' : ''}`} aria-label="Дневник чувств" aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}>Дневник</button>
           <label>Дата <input type="date" aria-label="Общая дата" value={selectedDate} onChange={(e) => e.target.value && changeDate(e.target.value)} /></label>
         </div>
+        <BackgroundVoiceMode />
         {mode === 'journal' ? <JournalPage key={`${selectedDate}:${JSON.stringify(journalTarget)}`} date={selectedDate} calendarId={calendarId} target={journalTarget} onDate={changeDate}
           onOpenTask={async (task, date) => { await updateSettings({ activeCalendarId: task.calendarId }); setAnchor(fromISODate(date ?? task.date ?? selectedDate)); setMode('calendar'); setOpenKey({ id: task.id, date }) }}
           onOpenFeed={(date) => { changeDate(date); setMode('calendar') }} /> : <DndContext

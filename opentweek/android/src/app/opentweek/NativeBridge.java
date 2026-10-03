@@ -84,6 +84,19 @@ public class NativeBridge {
     @JavascriptInterface public void cancelLocalVoiceDownload() { activity.localVoice.cancelDownload(); }
     @JavascriptInterface public void startLocalVoice(String sessionId) { activity.localVoice.start(sessionId); }
     @JavascriptInterface public void startLocalWake(String sessionId) { activity.localVoice.startWake(sessionId); }
+    @JavascriptInterface public void startLocalOverlay(String sessionId) { activity.localVoice.startOverlay(sessionId); }
+    @JavascriptInterface public void stopLocalOverlay(String sessionId) {
+        // Queue after start's UI-thread work, including when the permission dialog has not opened yet.
+        activity.runOnUiThread(() -> activity.localVoice.cancel(sessionId));
+    }
+    @JavascriptInterface public void requestLocalOverlayPermission() {
+        activity.runOnUiThread(() -> {
+            try {
+                activity.startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:" + activity.getPackageName())));
+            } catch (RuntimeException e) { LocalWakeService.reportOverlayError("overlay_settings_unavailable"); }
+        });
+    }
     @JavascriptInterface public String localWakeRecovery() { return LocalWakeService.recovery(activity.getApplicationContext()); }
     @JavascriptInterface public boolean clearLocalWakeRecovery(String sessionId) { return LocalWakeService.clearRecovery(activity.getApplicationContext(), sessionId); }
     @JavascriptInterface public void stopLocalVoice(String sessionId) { activity.localVoice.stop(sessionId); }

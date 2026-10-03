@@ -13,3 +13,5 @@ java -cp "$OUT" app.opentweek.WakeAudioBufferTest
 javac --release 8 -d "$OUT" src/app/opentweek/LocalVoiceFailure.java test/app/opentweek/LocalVoiceFailureTest.java
 java -cp "$OUT" app.opentweek.LocalVoiceFailureTest
 python3 test/wake-policy.py
+javac --release 8 -d "$OUT" src/app/opentweek/WakeOverlaySession.java test/app/opentweek/WakeOverlaySessionTest.java
+java -cp "$OUT" app.opentweek.WakeOverlaySessionTest

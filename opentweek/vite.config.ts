@@ -36,6 +36,7 @@ export default defineConfig({
   ],
   build: {
     rolldownOptions: {
+      input: { main: new URL('./index.html', import.meta.url).pathname, overlay: new URL('./overlay.html', import.meta.url).pathname },
       output: {
         codeSplitting: {
           groups: [

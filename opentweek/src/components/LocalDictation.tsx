@@ -8,6 +8,7 @@ export function LocalDictation({ onText, onBusy, onRecoveredText, allowWake = fa
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot)
   const handlers = useRef({ onText, onBusy, onRecoveredText })
   const [seconds, setSeconds] = useState(0)
+  const [otherMode, setOtherMode] = useState(false)
   const [wakeConsent, setWakeConsent] = useState(false)
   const [recovery, setRecovery] = useState<{ sessionId: string; text: string } | null>(null)
   const [inserting, setInserting] = useState(false)
@@ -16,6 +17,15 @@ export function LocalDictation({ onText, onBusy, onRecoveredText, allowWake = fa
   const recording = state.phase === 'recording'
   const waiting = state.phase === 'waiting'
   const busy = ['loading', 'waiting', 'recording', 'processing'].includes(state.phase)
+  useEffect(() => {
+    const refresh = () => { try {
+      const current = JSON.parse(localVoiceBridge()?.localVoiceStatus() || '{}')
+      const active = current.overlayActive === true || current.overlayStarting === true
+      setOtherMode(active)
+      if (active && controller.snapshot().phase !== 'idle') controller.cancel() // This editor never owns or restores a global overlay session.
+    } catch { /* Keep the last visible status. */ } }
+    refresh(); const timer = setInterval(refresh, 500); return () => clearInterval(timer)
+  }, [controller])
   useEffect(() => { handlers.current = { onText, onBusy, onRecoveredText } }, [onText, onBusy, onRecoveredText])
   useEffect(() => {
     const lifecycle = attachment.current
@@ -84,7 +94,7 @@ export function LocalDictation({ onText, onBusy, onRecoveredText, allowWake = fa
 
   return <section className="local-dictation" aria-label={j('voice')}>
     <h3><Icon name="mic" /> {j('voice')}</h3>
-    {!state.supported ? <p>{j('unsupported')}</p> : <>
+    {otherMode ? <p>Включён вызов из других приложений. Управление микрофоном находится в верхнем блоке и уведомлении; здесь можно печатать.</p> : !state.supported ? <p>{j('unsupported')}</p> : <>
       <p className="journal-hint">Звук обрабатывается на телефоне. Текст добавляется в черновик.</p>
       {!state.modelReady && <p className="journal-hint">{j('model')}</p>}
       <div className={`voice-status${recording || waiting ? ' recording' : ''}`} role="status" aria-live="polite">

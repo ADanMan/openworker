@@ -16,11 +16,16 @@ final class LocalWakeEngine {
     final String id;
     private final File modelDirectory;
     private final Events events;
+    private final long waitLimit;
     private volatile boolean cancelled, stopped;
     private volatile AudioRecord audio;
     private volatile WakePhrase gate;
     LocalWakeEngine(Context context, String id, Events events) {
+        this(context, id, events, WakePhrase.WAIT_LIMIT_MS);
+    }
+    LocalWakeEngine(Context context, String id, Events events, long waitLimit) {
         this.id = id; this.events = events;
+        this.waitLimit = waitLimit;
         modelDirectory = new File(new File(context.getNoBackupFilesDir(), "local-voice"), LocalVoiceModel.NAME);
     }
     void cancel() { cancelled = true; stopAudio(); }
@@ -47,7 +52,7 @@ final class LocalWakeEngine {
             if (cancelled) return;
             capture.startRecording();
             if (capture.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new LocalVoiceFailure("microphone_unavailable");
-            gate = new WakePhrase(SystemClock.elapsedRealtime());
+            gate = new WakePhrase(SystemClock.elapsedRealtime(), waitLimit);
             events.event("waiting", null, null);
             byte[] buffer = new byte[4096];
             while (!cancelled) {

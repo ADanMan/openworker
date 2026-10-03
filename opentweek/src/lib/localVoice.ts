@@ -5,6 +5,9 @@ export interface LocalVoiceBridge {
   cancelLocalVoiceDownload(): void
   startLocalVoice(sessionId: string): void
   startLocalWake?(sessionId: string): void
+  startLocalOverlay?(sessionId: string): void
+  stopLocalOverlay?(sessionId: string): void
+  requestLocalOverlayPermission?(): void
   localWakeRecovery?(): string
   clearLocalWakeRecovery?(sessionId: string): boolean
   stopLocalVoice(sessionId: string): void
@@ -59,7 +62,7 @@ export class LocalVoiceController {
         this.state = { ...this.state, supported: status.supported === true, modelReady: status.modelReady === true,
           wakeSupported: status.wakeSupported === true && typeof bridge.startLocalWake === 'function',
           phase: status.downloading ? 'downloading' : 'idle', progress: Number(status.progress) || 0 }
-        if (typeof status.wakeSessionId === 'string' && status.wakeSessionId && status.wakeSessionId.length <= 128
+        if (!status.overlayActive && typeof status.wakeSessionId === 'string' && status.wakeSessionId && status.wakeSessionId.length <= 128
           && ['loading', 'waiting', 'recording', 'processing'].includes(status.wakeState)) {
           this.session = status.wakeSessionId
           this.state.phase = status.wakeState
