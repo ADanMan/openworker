@@ -181,3 +181,16 @@ it('background wake result never automatically inserts text into an editor', () 
   expect(controller.receive({ sessionId: 'background-1', state: 'wake_result', text: 'Private pending text' })).toBeNull()
   expect(controller.snapshot().phase).toBe('idle')
 })
+
+it('an editor never adopts or cancels the separate global overlay microphone session', () => {
+  const calls: string[] = []
+  const bridge: LocalVoiceBridge = {
+    localVoiceStatus: () => JSON.stringify({ supported:true, modelReady:true, wakeSupported:true, overlayActive:true, wakeSessionId:'global', wakeState:'waiting' }),
+    downloadLocalVoiceModel() {}, cancelLocalVoiceDownload() {}, startLocalVoice() {}, startLocalWake() {}, stopLocalVoice() {},
+    cancelLocalVoice: id => { calls.push(id) },
+  }
+  const editor = new LocalVoiceController(bridge)
+  expect(editor.snapshot().phase).toBe('idle')
+  editor.cancel(); editor.dispose()
+  expect(calls).toEqual([])
+})

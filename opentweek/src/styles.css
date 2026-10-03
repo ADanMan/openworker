@@ -517,3 +517,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 
 .segmented[hidden] { display:none; }
+
+.background-voice-mode { flex-shrink:0; border-bottom:1px solid var(--rule); padding:10px 14px; font-size:13px; }
+.background-voice-mode p { max-width:760px; line-height:1.5; margin:8px 0; }
+.background-voice-mode summary { cursor:pointer; }
+.background-voice-mode[open] { max-height:40dvh; overflow:auto; }

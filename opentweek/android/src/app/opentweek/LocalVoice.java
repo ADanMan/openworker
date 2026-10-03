@@ -33,9 +33,10 @@ final class LocalVoice {
     private static final class Session {
         final String id;
         final boolean wake;
+        final boolean overlay;
         volatile boolean cancelled, stopped;
         AudioRecord audio;
-        Session(String id, boolean wake) { this.id = id; this.wake = wake; }
+        Session(String id, boolean wake, boolean overlay) { this.id = id; this.wake = wake; this.overlay = overlay; }
     }
     LocalVoice(MainActivity activity) {
         this.activity = activity;
@@ -47,7 +48,11 @@ final class LocalVoice {
         try { return new JSONObject().put("supported", true).put("modelReady", LocalVoiceModel.valid(modelDirectory))
             .put("downloading", downloading).put("progress", progress / 100.0).put("modelName", LocalVoiceModel.NAME)
             .put("modelBytes", LocalVoiceModel.BYTES).put("wakeSupported", true).put("wakeState", LocalWakeService.state())
-            .put("wakeSessionId", LocalWakeService.sessionId()).toString(); }
+            .put("wakeSessionId", current != null && current.overlay && !LocalWakeService.active(current.id) ? current.id : LocalWakeService.sessionId())
+            .put("overlaySupported", Build.VERSION.SDK_INT >= 26).put("overlayAllowed", android.provider.Settings.canDrawOverlays(activity))
+            .put("overlayActive", LocalWakeService.overlayActive()).put("overlayRemaining", LocalWakeService.overlayRemaining())
+            .put("overlayStarting", current != null && current.overlay && !LocalWakeService.active(current.id))
+            .put("overlayError", LocalWakeService.overlayError()).put("pendingResult", !LocalWakeService.recovery(activity).isEmpty()).toString(); }
         catch (Exception e) { return "{}"; }
     }
     private void emit(String id, String state, String text, String error, int percent) {
@@ -74,12 +79,23 @@ final class LocalVoice {
     }
     void start(String id) { start(id, false); }
     void startWake(String id) { start(id, true); }
+    void startOverlay(String id) { start(id, true, true); }
     private void start(String id, boolean wake) {
+        start(id, wake, false);
+    }
+    private void start(String id, boolean wake, boolean overlay) {
         activity.runOnUiThread(() -> { synchronized (LocalVoice.this) {
             if (destroyed || !foreground || id == null || id.isEmpty() || id.length() > 128) return;
+            if (LocalWakeService.overlayActive()) { emit(id, "error", null, "overlay_busy", -1); return; }
             if (current != null) cancel(current.id);
             LocalWakeService.cancelCurrent(activity.getApplicationContext());
-            Session s = new Session(id, wake); current = s;
+            Session s = new Session(id, wake, overlay); current = s;
+            if (overlay) {
+                LocalWakeService.reportOverlayError("");
+                if (Build.VERSION.SDK_INT < 26 || !android.provider.Settings.canDrawOverlays(activity)) {
+                    terminal(s, "error", null, "overlay_permission"); return;
+                }
+            }
             if (!LocalVoiceModel.valid(modelDirectory)) { terminal(s, "error", null, "model_missing"); return; }
             sessionEvent(s, "loading", null, null);
             if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
@@ -106,7 +122,7 @@ final class LocalVoice {
     private void begin(Session s) {
         if (s.wake) {
             if (!notificationsVisible()) { terminal(s, "error", null, "notification_permission"); return; }
-            try { LocalWakeService.start(activity.getApplicationContext(), this, s.id); }
+            try { LocalWakeService.start(activity.getApplicationContext(), this, s.id, s.overlay); }
             catch (RuntimeException e) { terminal(s, "error", null, LocalVoiceFailure.service(e)); }
         } else recognition.execute(() -> record(s));
     }
@@ -121,6 +137,7 @@ final class LocalVoice {
     private synchronized void terminal(Session s, String state, String text, String error) {
         if (current != s || s.cancelled || destroyed) return;
         current = null;
+        if (s.overlay && "error".equals(state)) LocalWakeService.reportOverlayError(error);
         emit(s.id, state, text, error, -1);
     }
     synchronized void stop(String id) {
