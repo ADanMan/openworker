@@ -130,7 +130,9 @@ public class MainActivity extends Activity {
         try {
             JSONObject o = new JSONObject();
             String action = intent.getAction();
-            if (intent.getStringExtra("taskId") != null) {
+            if (intent.getBooleanExtra("wakeRecovery", false)) {
+                o.put("kind", "wakeRecovery");
+            } else if (intent.getStringExtra("taskId") != null) {
                 o.put("kind", "task");
                 o.put("taskId", intent.getStringExtra("taskId"));
                 o.put("date", intent.getStringExtra("date") == null ? "" : intent.getStringExtra("date"));

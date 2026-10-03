@@ -484,3 +484,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   .journal-link .btn { white-space:normal; overflow-wrap:anywhere; }
 }
 @media print { .mode-bar, .day-journal { display:none; } }
+
+.wake-experiment { margin-top:16px; padding-top:12px; border-top:1px solid var(--rule); }
+.wake-experiment summary { cursor:pointer; font-size:13px; }
+.wake-opt-in { display:flex; align-items:flex-start; gap:8px; margin:12px 0; font-size:12px; line-height:1.7; }
+.wake-opt-in input { flex-shrink:0; margin-top:4px; }
+.wake-experiment .btn { white-space:normal; }
+.wake-recovery { margin-top:16px; padding:12px; background:var(--accent-soft); border-radius:10px; }
+.wake-recovery blockquote { white-space:pre-wrap; overflow-wrap:anywhere; margin:12px 0; max-height:240px; overflow:auto; }

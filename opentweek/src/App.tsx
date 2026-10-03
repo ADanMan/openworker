@@ -139,6 +139,10 @@ function Board({ settings }: { settings: Settings }) {
     intentRef.current = (i) => {
       if (i.kind === 'task') { setMode('calendar'); setOpenKey({ id: i.taskId, date: i.date }) }
       else if (i.kind === 'voice') void startVoice()
+      else if (i.kind === 'wakeRecovery') {
+        if (document.querySelector('dialog[open]')) toast('Диктовка сохранена. Закройте редактор и откройте дневник для проверки.')
+        else setMode('journal')
+      }
       else if (i.kind === 'new') {
         setAnchor(new Date())
         focusAddLine(dayContainer(today))
@@ -451,4 +455,3 @@ function Board({ settings }: { settings: Settings }) {
     </BoardContext.Provider>
   )
 }
-

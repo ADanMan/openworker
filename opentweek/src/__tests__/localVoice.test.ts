@@ -98,3 +98,86 @@ describe('download cancellation acknowledgement', () => {
     expect(calls).toEqual(['download', 'cancelDownload', 'download'])
   })
 })
+
+describe('experimental wake sessions', () => {
+  function wake(ready = true) {
+    const calls: string[] = []
+    let n = 0
+    const bridge: LocalVoiceBridge = {
+      localVoiceStatus: () => JSON.stringify({ supported: true, modelReady: ready, wakeSupported: true }),
+      downloadLocalVoiceModel() {}, cancelLocalVoiceDownload() {},
+      startLocalVoice: (id) => { calls.push(`start:${id}`) },
+      startLocalWake: (id) => { calls.push(`wake:${id}`) },
+      stopLocalVoice: (id) => { calls.push(`stop:${id}`) },
+      cancelLocalVoice: (id) => { calls.push(`cancel:${id}`) },
+    }
+    return { calls, controller: new LocalVoiceController(bridge, () => `w${++n}`) }
+  }
+  it('requires fresh explicit consent and an installed model', () => {
+    const { controller, calls } = wake()
+    controller.startWake(); expect(calls).toEqual([])
+    controller.startWake(true); controller.startWake(true)
+    expect(calls).toEqual(['wake:w1'])
+    expect(controller.snapshot().phase).toBe('loading')
+    const missing = wake(false)
+    missing.controller.startWake(true)
+    expect(missing.calls).toEqual([])
+    expect(missing.controller.snapshot().error).toBe('model_missing')
+  })
+  it('separates waiting from dictation, completes once, and never rearms automatically', () => {
+    const { controller, calls } = wake()
+    controller.startWake(true)
+    expect(controller.receive({ sessionId: 'w1', state: 'waiting' })).toBeNull()
+    expect(controller.snapshot().phase).toBe('waiting')
+    controller.stop(); expect(calls).toEqual(['wake:w1'])
+    controller.receive({ sessionId: 'w1', state: 'recording' })
+    controller.receive({ sessionId: 'w1', state: 'waiting' })
+    expect(controller.snapshot().phase).toBe('recording')
+    controller.stop()
+    const result = { sessionId: 'w1', state: 'result' as const, text: 'Сегодня спокойно' }
+    expect(controller.receive(result)).toBe('Сегодня спокойно')
+    expect(controller.receive(result)).toBeNull()
+    expect(controller.snapshot().phase).toBe('idle')
+    expect(calls).toEqual(['wake:w1', 'stop:w1'])
+  })
+  it('cancels waiting and rejects stale activation or transcript', () => {
+    const { controller, calls } = wake()
+    controller.startWake(true); controller.receive({ sessionId: 'w1', state: 'waiting' }); controller.cancel()
+    controller.startWake(true)
+    controller.receive({ sessionId: 'w1', state: 'recording' })
+    expect(controller.receive({ sessionId: 'w1', state: 'result', text: 'late' })).toBeNull()
+    expect(controller.snapshot().phase).toBe('loading')
+    expect(calls).toEqual(['wake:w1', 'cancel:w1', 'wake:w2'])
+  })
+  it.each(['wake_timeout', 'notification_permission', 'permission_denied'])('terminates %s without fallback or rearm', error => {
+    const { controller, calls } = wake()
+    controller.startWake(true)
+    controller.receive({ sessionId: 'w1', state: 'error', error })
+    expect(controller.snapshot()).toMatchObject({ phase: 'idle', error })
+    expect(calls).toEqual(['wake:w1'])
+  })
+  it('late model setup callbacks cannot hide an active microphone', () => {
+    const { controller } = wake()
+    controller.startWake(true); controller.receive({ sessionId: 'w1', state: 'waiting' })
+    controller.receive({ sessionId: '', state: 'ready' })
+    controller.receive({ sessionId: '', state: 'cancelled' })
+    expect(controller.snapshot().phase).toBe('waiting')
+  })
+  it('older APKs expose no wake capability even if a status flag claims it', () => {
+    const { controller, calls } = setup()
+    controller.startWake(true)
+    expect(controller.snapshot().error).toBe('wake_unsupported')
+    expect(calls).toEqual([])
+  })
+})
+
+it('background wake result never automatically inserts text into an editor', () => {
+  const bridge: LocalVoiceBridge = {
+    localVoiceStatus: () => JSON.stringify({ supported: true, modelReady: true, wakeSupported: true, wakeSessionId: 'background-1', wakeState: 'waiting' }),
+    downloadLocalVoiceModel() {}, cancelLocalVoiceDownload() {}, startLocalVoice() {}, startLocalWake() {}, stopLocalVoice() {}, cancelLocalVoice() {},
+  }
+  const controller = new LocalVoiceController(bridge)
+  expect(controller.snapshot().phase).toBe('waiting')
+  expect(controller.receive({ sessionId: 'background-1', state: 'wake_result', text: 'Private pending text' })).toBeNull()
+  expect(controller.snapshot().phase).toBe('idle')
+})

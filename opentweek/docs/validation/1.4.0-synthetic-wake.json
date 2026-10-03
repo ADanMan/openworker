@@ -1,0 +1,215 @@
+{
+  "gate": "constrained exact AND unrestricted normalized exact эй твик",
+  "results": [
+    {
+      "id": "positive_slow",
+      "spoken_text": "Эй, Твик",
+      "say_rate": 100,
+      "duration_seconds": 1.08775,
+      "finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "exact_activation": true,
+      "unrestricted_finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "unrestricted_normalized": "эй твик",
+      "dual_exact_activation": true
+    },
+    {
+      "id": "positive_normal",
+      "spoken_text": "Эй, Твик",
+      "say_rate": 180,
+      "duration_seconds": 0.9035625,
+      "finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "exact_activation": true,
+      "unrestricted_finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "unrestricted_normalized": "эй твик",
+      "dual_exact_activation": true
+    },
+    {
+      "id": "positive_fast",
+      "spoken_text": "Эй, Твик",
+      "say_rate": 260,
+      "duration_seconds": 0.663625,
+      "finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "exact_activation": true,
+      "unrestricted_finals": [
+        {
+          "text": "ты твик"
+        }
+      ],
+      "unrestricted_normalized": "ты твик",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "near_ty",
+      "spoken_text": "эй ты",
+      "say_rate": 180,
+      "duration_seconds": 0.474,
+      "finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "exact_activation": true,
+      "unrestricted_finals": [
+        {
+          "text": "ты"
+        }
+      ],
+      "unrestricted_normalized": "ты",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "near_vik",
+      "spoken_text": "эй Вик",
+      "say_rate": 180,
+      "duration_seconds": 0.5433125,
+      "finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "exact_activation": true,
+      "unrestricted_finals": [
+        {
+          "text": "эй вик"
+        }
+      ],
+      "unrestricted_normalized": "эй вик",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "near_tviker",
+      "spoken_text": "эй Твикер",
+      "say_rate": 180,
+      "duration_seconds": 0.74075,
+      "finals": [
+        {
+          "text": "эй твик"
+        }
+      ],
+      "exact_activation": true,
+      "unrestricted_finals": [
+        {
+          "text": "эй твитер"
+        }
+      ],
+      "unrestricted_normalized": "эй твитер",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "bare_tvik",
+      "spoken_text": "Твик",
+      "say_rate": 180,
+      "duration_seconds": 0.3640625,
+      "finals": [
+        {
+          "text": "твик"
+        }
+      ],
+      "exact_activation": false,
+      "unrestricted_finals": [
+        {
+          "text": "твик"
+        }
+      ],
+      "unrestricted_normalized": "твик",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "bare_ey",
+      "spoken_text": "эй",
+      "say_rate": 180,
+      "duration_seconds": 0.3346875,
+      "finals": [
+        {
+          "text": "эй"
+        }
+      ],
+      "exact_activation": false,
+      "unrestricted_finals": [
+        {
+          "text": "эй"
+        }
+      ],
+      "unrestricted_normalized": "эй",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "unrelated",
+      "spoken_text": "Сегодня хорошая погода, я иду гулять.",
+      "say_rate": 180,
+      "duration_seconds": 2.597125,
+      "finals": [
+        {
+          "text": "[unk] эй"
+        }
+      ],
+      "exact_activation": false,
+      "unrestricted_finals": [
+        {
+          "text": "сегодня хорошая погода я иду гулять"
+        }
+      ],
+      "unrestricted_normalized": "сегодня хорошая погода я иду гулять",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "silence",
+      "spoken_text": null,
+      "say_rate": null,
+      "duration_seconds": 3.0,
+      "finals": [
+        {
+          "text": ""
+        }
+      ],
+      "exact_activation": false,
+      "unrestricted_finals": [
+        {
+          "text": ""
+        }
+      ],
+      "unrestricted_normalized": "",
+      "dual_exact_activation": false
+    },
+    {
+      "id": "seeded_noise",
+      "spoken_text": null,
+      "say_rate": null,
+      "duration_seconds": 3.0,
+      "finals": [
+        {
+          "text": ""
+        }
+      ],
+      "exact_activation": false,
+      "unrestricted_finals": [
+        {
+          "text": ""
+        }
+      ],
+      "unrestricted_normalized": "",
+      "dual_exact_activation": false
+    }
+  ],
+  "limits": "Synthetic one-voice offline smoke test; not real-world false-accept/false-reject certification."
+}

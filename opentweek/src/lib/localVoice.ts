@@ -4,13 +4,16 @@ export interface LocalVoiceBridge {
   downloadLocalVoiceModel(): void
   cancelLocalVoiceDownload(): void
   startLocalVoice(sessionId: string): void
+  startLocalWake?(sessionId: string): void
+  localWakeRecovery?(): string
+  clearLocalWakeRecovery?(sessionId: string): boolean
   stopLocalVoice(sessionId: string): void
   cancelLocalVoice(sessionId: string): void
 }
 
 export interface LocalVoiceEvent {
   sessionId: string
-  state: 'loading' | 'recording' | 'processing' | 'result' | 'error' | 'cancelled' | 'downloading' | 'ready'
+  state: 'loading' | 'waiting' | 'recording' | 'processing' | 'result' | 'wake_result' | 'error' | 'cancelled' | 'downloading' | 'ready'
   text?: string
   error?: string
   progress?: number
@@ -19,7 +22,8 @@ export interface LocalVoiceEvent {
 export interface LocalVoiceState {
   supported: boolean
   modelReady: boolean
-  phase: 'idle' | 'loading' | 'recording' | 'processing' | 'downloading' | 'cancelling'
+  wakeSupported: boolean
+  phase: 'idle' | 'loading' | 'waiting' | 'recording' | 'processing' | 'downloading' | 'cancelling'
   progress: number
   error: string
 }
@@ -38,7 +42,7 @@ export function localVoiceBridge(): LocalVoiceBridge | undefined {
 }
 
 export class LocalVoiceController {
-  private state: LocalVoiceState = { supported: false, modelReady: false, phase: 'idle', progress: 0, error: '' }
+  private state: LocalVoiceState = { supported: false, modelReady: false, wakeSupported: false, phase: 'idle', progress: 0, error: '' }
   private session = ''
   private disposed = false
   private subscribers = new Set<() => void>()
@@ -53,7 +57,13 @@ export class LocalVoiceController {
       try {
         const status = JSON.parse(bridge.localVoiceStatus())
         this.state = { ...this.state, supported: status.supported === true, modelReady: status.modelReady === true,
+          wakeSupported: status.wakeSupported === true && typeof bridge.startLocalWake === 'function',
           phase: status.downloading ? 'downloading' : 'idle', progress: Number(status.progress) || 0 }
+        if (typeof status.wakeSessionId === 'string' && status.wakeSessionId && status.wakeSessionId.length <= 128
+          && ['loading', 'waiting', 'recording', 'processing'].includes(status.wakeState)) {
+          this.session = status.wakeSessionId
+          this.state.phase = status.wakeState
+        }
       } catch { this.state.error = 'unavailable' }
     }
   }
@@ -66,12 +76,24 @@ export class LocalVoiceController {
   }
 
   start() {
+    this.begin(false)
+  }
+
+  /** Consent is per activation; callers must obtain it through the visible experimental control. */
+  startWake(confirmed = false) {
+    if (!confirmed) return
+    if (!this.state.wakeSupported) return this.update({ error: 'wake_unsupported' })
+    this.begin(true)
+  }
+
+  private begin(wake: boolean) {
     if (this.disposed || this.state.phase !== 'idle') return
     if (!this.bridge || !this.state.supported) return this.update({ error: 'unsupported' })
     if (!this.state.modelReady) return this.update({ error: 'model_missing' })
     this.session = this.newId()
     this.update({ phase: 'loading', error: '' })
-    try { this.bridge.startLocalVoice(this.session) } catch { this.session = ''; this.update({ phase: 'idle', error: 'unavailable' }) }
+    try { if (wake) this.bridge.startLocalWake!(this.session); else this.bridge.startLocalVoice(this.session) }
+    catch { this.session = ''; this.update({ phase: 'idle', error: 'unavailable' }) }
   }
 
   stop() {
@@ -103,6 +125,7 @@ export class LocalVoiceController {
   receive(event: LocalVoiceEvent): string | null {
     if (this.disposed || !event || typeof event !== 'object') return null
     if (!event.sessionId) {
+      if (this.session) return null // Late model callbacks cannot reset active microphone state.
       if (event.state === 'ready') this.update({ modelReady: true, phase: 'idle', progress: 1, error: '' })
       else if (event.state === 'downloading' && this.state.phase !== 'cancelling') this.update({ phase: 'downloading', progress: Math.max(0, Math.min(1, event.progress ?? 0)) })
       else if (event.state === 'error') this.update({ phase: 'idle', error: event.error || 'download_failed' })
@@ -110,9 +133,11 @@ export class LocalVoiceController {
       return null
     }
     if (!this.session || event.sessionId !== this.session) return null
-    if (event.state === 'loading' || event.state === 'recording' || event.state === 'processing') {
+    if (event.state === 'waiting') {
+      if (this.state.phase === 'loading' || this.state.phase === 'waiting') this.update({ phase: 'waiting' })
+    } else if (event.state === 'loading' || event.state === 'recording' || event.state === 'processing') {
       this.update({ phase: event.state })
-    } else if (event.state === 'result' || event.state === 'error' || event.state === 'cancelled') {
+    } else if (event.state === 'result' || event.state === 'wake_result' || event.state === 'error' || event.state === 'cancelled') {
       this.session = ''
       const text = typeof event.text === 'string' ? event.text.trim() : ''
       this.update({ phase: 'idle', error: event.state === 'error' ? event.error || 'recognition_failed' : event.state === 'result' && !text ? 'no_speech' : '' })

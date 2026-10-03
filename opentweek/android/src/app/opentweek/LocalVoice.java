@@ -6,6 +6,8 @@ import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.SystemClock;
+import android.os.Build;
+import android.app.NotificationManager;
 import org.json.JSONObject;
 import org.vosk.Model;
 import org.vosk.Recognizer;
@@ -30,19 +32,22 @@ final class LocalVoice {
     private Session permissionPending;
     private static final class Session {
         final String id;
+        final boolean wake;
         volatile boolean cancelled, stopped;
         AudioRecord audio;
-        Session(String id) { this.id = id; }
+        Session(String id, boolean wake) { this.id = id; this.wake = wake; }
     }
     LocalVoice(MainActivity activity) {
         this.activity = activity;
         root = new File(activity.getNoBackupFilesDir(), "local-voice");
         modelDirectory = new File(root, LocalVoiceModel.NAME);
+        LocalWakeService.observe(this);
     }
     synchronized String status() {
         try { return new JSONObject().put("supported", true).put("modelReady", LocalVoiceModel.valid(modelDirectory))
             .put("downloading", downloading).put("progress", progress / 100.0).put("modelName", LocalVoiceModel.NAME)
-            .put("modelBytes", LocalVoiceModel.BYTES).put("wakeSupported", false).toString(); }
+            .put("modelBytes", LocalVoiceModel.BYTES).put("wakeSupported", true).put("wakeState", LocalWakeService.state())
+            .put("wakeSessionId", LocalWakeService.sessionId()).toString(); }
         catch (Exception e) { return "{}"; }
     }
     private void emit(String id, String state, String text, String error, int percent) {
@@ -57,44 +62,79 @@ final class LocalVoice {
             }});
         } catch (Exception ignored) { }
     }
-    private void sessionEvent(Session s, String state, String text, String error) {
-        activity.runOnUiThread(() -> { synchronized (LocalVoice.this) {
-            if (current == s && !s.cancelled && !destroyed) emit(s.id, state, text, error, -1);
-        }});
+    private synchronized void sessionEvent(Session s, String state, String text, String error) {
+        if (current == s && !s.cancelled && !destroyed) emit(s.id, state, text, error, -1);
     }
     synchronized void foreground(boolean value) {
         foreground = value;
-        if (!value && current != null) cancel(current.id);
+        if (!value && current != null && (!current.wake || !LocalWakeService.active(current.id))) cancel(current.id);
     }
     synchronized void close() {
-        foreground(false); destroyed = true; cancelDownload(); recognition.shutdownNow();
+        foreground(false); LocalWakeService.detach(this); destroyed = true; cancelDownload(); recognition.shutdownNow();
     }
-    void start(String id) {
+    void start(String id) { start(id, false); }
+    void startWake(String id) { start(id, true); }
+    private void start(String id, boolean wake) {
         activity.runOnUiThread(() -> { synchronized (LocalVoice.this) {
             if (destroyed || !foreground || id == null || id.isEmpty() || id.length() > 128) return;
             if (current != null) cancel(current.id);
-            Session s = new Session(id); current = s;
-            if (!LocalVoiceModel.valid(modelDirectory)) { sessionEvent(s, "error", null, "model_missing"); return; }
+            LocalWakeService.cancelCurrent(activity.getApplicationContext());
+            Session s = new Session(id, wake); current = s;
+            if (!LocalVoiceModel.valid(modelDirectory)) { terminal(s, "error", null, "model_missing"); return; }
             sessionEvent(s, "loading", null, null);
-            if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                if (permissionPending != null) { sessionEvent(s, "error", null, "permission_pending"); return; }
+            if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+                || (wake && Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)) {
+                if (permissionPending != null) { terminal(s, "error", null, "permission_pending"); return; }
                 permissionPending = s;
-                activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSION);
-            } else recognition.execute(() -> record(s));
+                activity.requestPermissions(wake && Build.VERSION.SDK_INT >= 33
+                    ? new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS}
+                    : new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSION);
+            } else begin(s);
         }});
     }
     synchronized void permissionResult(boolean granted) {
         Session s = permissionPending; permissionPending = null;
         if (s == null || s != current || s.cancelled || !foreground || destroyed) return;
-        if (granted) recognition.execute(() -> record(s));
-        else sessionEvent(s, "error", null, "permission_denied");
+        if (s.wake && !notificationsVisible()) terminal(s, "error", null, "notification_permission");
+        else if (granted) begin(s);
+        else terminal(s, "error", null, "permission_denied");
+    }
+    private boolean notificationsVisible() {
+        return ((NotificationManager)activity.getSystemService(android.content.Context.NOTIFICATION_SERVICE)).areNotificationsEnabled()
+            && (Build.VERSION.SDK_INT < 33 || activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED);
+    }
+    private void begin(Session s) {
+        if (s.wake) {
+            if (!notificationsVisible()) { terminal(s, "error", null, "notification_permission"); return; }
+            try { LocalWakeService.start(activity.getApplicationContext(), this, s.id); }
+            catch (RuntimeException e) { terminal(s, "error", null, "recognition_failed"); }
+        } else recognition.execute(() -> record(s));
+    }
+    void wakeEvent(String id, String state, String text, String error) {
+        synchronized (this) {
+            if (destroyed) return;
+            if (current != null && current.wake && current.id.equals(id)
+                && ("wake_result".equals(state) || "cancelled".equals(state) || "error".equals(state))) current = null;
+        }
+        emit(id, state, text, error, -1);
+    }
+    private synchronized void terminal(Session s, String state, String text, String error) {
+        if (current != s || s.cancelled || destroyed) return;
+        current = null;
+        emit(s.id, state, text, error, -1);
     }
     synchronized void stop(String id) {
+        if (LocalWakeService.active(id)) { LocalWakeService.finish(activity.getApplicationContext(), id); return; }
         if (current == null || !current.id.equals(id)) return;
+        if (current.wake) { cancel(id); return; }
         current.stopped = true;
         if (current.audio != null) try { current.audio.stop(); } catch (Exception ignored) { }
     }
     synchronized void cancel(String id) {
+        if (LocalWakeService.active(id)) {
+            if (current != null && current.wake && current.id.equals(id)) current = null;
+            LocalWakeService.cancel(activity.getApplicationContext(), id); return;
+        }
         if (current == null || !current.id.equals(id)) return;
         Session s = current; s.cancelled = true; stop(id); current = null;
         emit(id, "cancelled", null, null, -1);
@@ -104,7 +144,7 @@ final class LocalVoice {
         try (Model model = new Model(modelDirectory.getAbsolutePath()); Recognizer recognizer = new Recognizer(model, 16000)) {
             synchronized (this) {
                 if (s != current || s.cancelled || !foreground || destroyed) return;
-                if (s.stopped) { sessionEvent(s, "result", "", null); return; }
+                if (s.stopped) { terminal(s, "result", "", null); return; }
                 int minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
                 if (minimum <= 0) throw new IOException("microphone_unavailable");
                 audio = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
@@ -143,9 +183,9 @@ final class LocalVoice {
             sessionEvent(s, "processing", null, null);
             String tail = new JSONObject(recognizer.getFinalResult()).optString("text").trim();
             if (!tail.isEmpty()) { if (text.length() > 0) text.append(' '); text.append(tail); }
-            sessionEvent(s, "result", text.toString(), null);
+            terminal(s, "result", text.toString(), null);
         } catch (Exception | LinkageError e) {
-            if (!s.cancelled) sessionEvent(s, "error", null, "recognition_failed");
+            if (!s.cancelled) terminal(s, "error", null, "recognition_failed");
         } finally {
             synchronized (this) {
                 s.audio = null;
