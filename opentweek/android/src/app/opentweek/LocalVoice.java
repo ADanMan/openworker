@@ -107,7 +107,7 @@ final class LocalVoice {
         if (s.wake) {
             if (!notificationsVisible()) { terminal(s, "error", null, "notification_permission"); return; }
             try { LocalWakeService.start(activity.getApplicationContext(), this, s.id); }
-            catch (RuntimeException e) { terminal(s, "error", null, "recognition_failed"); }
+            catch (RuntimeException e) { terminal(s, "error", null, LocalVoiceFailure.service(e)); }
         } else recognition.execute(() -> record(s));
     }
     void wakeEvent(String id, String state, String text, String error) {
@@ -146,13 +146,13 @@ final class LocalVoice {
                 if (s != current || s.cancelled || !foreground || destroyed) return;
                 if (s.stopped) { terminal(s, "result", "", null); return; }
                 int minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-                if (minimum <= 0) throw new IOException("microphone_unavailable");
+                if (minimum <= 0) throw new LocalVoiceFailure("microphone_unavailable");
                 audio = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(minimum, 8192));
                 s.audio = audio;
-                if (audio.getState() != AudioRecord.STATE_INITIALIZED) throw new IOException("microphone_unavailable");
+                if (audio.getState() != AudioRecord.STATE_INITIALIZED) throw new LocalVoiceFailure("microphone_unavailable");
                 audio.startRecording();
-                if (audio.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new IOException("microphone_unavailable");
+                if (audio.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new LocalVoiceFailure("microphone_unavailable");
             }
             sessionEvent(s, "recording", null, null);
             byte[] buffer = new byte[4096];
@@ -162,7 +162,8 @@ final class LocalVoice {
             while (!s.cancelled && !s.stopped && SystemClock.elapsedRealtime() - started < 120000) {
                 int n = audio.read(buffer, 0, buffer.length);
                 if (s.cancelled || s.stopped) break;
-                if (n < 0) throw new IOException("microphone_read_failed");
+                if (n < 0) throw new LocalVoiceFailure(LocalVoiceFailure.readError(n));
+                LocalAudioCapture.checkSilenced(audio);
                 if (n > 0 && recognizer.acceptWaveForm(buffer, n)) {
                     String segment = new JSONObject(recognizer.getResult()).optString("text").trim();
                     if (!segment.isEmpty()) {
@@ -177,6 +178,7 @@ final class LocalVoice {
                 if (SystemClock.elapsedRealtime() - started > 15000 && text.length() == 0
                         && partial.isEmpty()) break;
             }
+            if (!s.cancelled) LocalAudioCapture.checkSilenced(audio);
             synchronized (this) { if (s.audio != null) { try { s.audio.stop(); } catch (Exception ignored) { } s.audio = null; } }
             audio.release(); audio = null;
             if (s.cancelled) return;
@@ -185,7 +187,7 @@ final class LocalVoice {
             if (!tail.isEmpty()) { if (text.length() > 0) text.append(' '); text.append(tail); }
             terminal(s, "result", text.toString(), null);
         } catch (Exception | LinkageError e) {
-            if (!s.cancelled) terminal(s, "error", null, "recognition_failed");
+            if (!s.cancelled) terminal(s, "error", null, LocalVoiceFailure.recognition(e));
         } finally {
             synchronized (this) {
                 s.audio = null;

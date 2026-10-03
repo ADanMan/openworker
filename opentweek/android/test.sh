@@ -10,4 +10,6 @@ javac --release 8 -d "$OUT" src/app/opentweek/WakePhrase.java test/app/opentweek
 java -cp "$OUT" app.opentweek.WakePhraseTest
 javac --release 8 -d "$OUT" src/app/opentweek/WakeAudioBuffer.java test/app/opentweek/WakeAudioBufferTest.java
 java -cp "$OUT" app.opentweek.WakeAudioBufferTest
+javac --release 8 -d "$OUT" src/app/opentweek/LocalVoiceFailure.java test/app/opentweek/LocalVoiceFailureTest.java
+java -cp "$OUT" app.opentweek.LocalVoiceFailureTest
 python3 test/wake-policy.py

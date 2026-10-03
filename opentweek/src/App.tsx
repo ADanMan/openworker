@@ -351,8 +351,8 @@ function Board({ settings }: { settings: Settings }) {
             </select>
           </div>
           <div className="period">
-            <h1>{title}</h1>
-            {view === 'week' && settings.showWeekNumbers && <span className="week-badge">W{weekNumber(days[3])}</span>}
+            <h1>{mode === 'journal' ? fmt(anchor, 'd MMMM yyyy') : title}</h1>
+            {mode === 'calendar' && view === 'week' && settings.showWeekNumbers && <span className="week-badge">W{weekNumber(days[3])}</span>}
           </div>
           <nav className="nav">
             <button className="icon-btn" aria-label={t('previous')} onClick={() => changeDate(mode === 'journal' ? isoAddDays(selectedDate, -1) : toISODate(shift(anchor, view, -1)))}>
@@ -364,7 +364,7 @@ function Board({ settings }: { settings: Settings }) {
             <button className="icon-btn" aria-label={t('next')} onClick={() => changeDate(mode === 'journal' ? isoAddDays(selectedDate, 1) : toISODate(shift(anchor, view, 1)))}>
               <Icon name="right" />
             </button>
-            <div className="segmented" role="tablist">
+            <div className="segmented" role="tablist" hidden={mode === 'journal'}>
               {(['week', 'month'] as const).map((v) => (
                 <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => updateSettings({ view: v })}>
                   {v === 'week' ? t('week') : t('month')}
@@ -373,8 +373,7 @@ function Board({ settings }: { settings: Settings }) {
             </div>
           </nav>
           <div className="tools">
-            <button className="btn journal-open" aria-pressed={mode === 'journal'} onClick={() => setMode(mode === 'journal' ? 'calendar' : 'journal')}><Icon name="note" /> {mode === 'journal' ? 'Календарь' : j('journal')}</button>
-            {canVoice && (
+            {canVoice && mode === 'calendar' && (
               <button className="icon-btn" aria-label={t('voiceTask')} title={`${t('voiceTask')} (V)`} onClick={startVoice}>
                 <Icon name="mic" />
               </button>
@@ -404,8 +403,8 @@ function Board({ settings }: { settings: Settings }) {
 
         <div className="mode-bar" aria-label="Режим приложения">
           <button className={`btn${mode === 'calendar' ? ' primary' : ''}`} aria-pressed={mode === 'calendar'} onClick={() => setMode('calendar')}>Календарь</button>
-          <button className={`btn${mode === 'journal' ? ' primary' : ''}`} aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}>Дневник</button>
-          <label>Общая дата <input type="date" aria-label="Общая дата" value={selectedDate} onChange={(e) => e.target.value && changeDate(e.target.value)} /></label>
+          <button className={`btn${mode === 'journal' ? ' primary' : ''}`} aria-label="Дневник чувств" aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}>Дневник</button>
+          <label>Дата <input type="date" aria-label="Общая дата" value={selectedDate} onChange={(e) => e.target.value && changeDate(e.target.value)} /></label>
         </div>
         {mode === 'journal' ? <JournalPage key={`${selectedDate}:${JSON.stringify(journalTarget)}`} date={selectedDate} calendarId={calendarId} target={journalTarget} onDate={changeDate}
           onOpenTask={async (task, date) => { await updateSettings({ activeCalendarId: task.calendarId }); setAnchor(fromISODate(date ?? task.date ?? selectedDate)); setMode('calendar'); setOpenKey({ id: task.id, date }) }}

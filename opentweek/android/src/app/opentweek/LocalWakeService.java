@@ -24,6 +24,7 @@ public final class LocalWakeService extends Service {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private LocalWakeEngine engine;
+    private Notification.Builder ongoingNotification;
     static void observe(LocalVoice voice) { observer = new WeakReference<>(voice); }
     static void detach(LocalVoice voice) { if (observer.get() == voice) observer = new WeakReference<>(null); }
     static String state() { return activeState; }
@@ -86,6 +87,7 @@ public final class LocalWakeService extends Service {
         if (!active(id)) { if (activeId.isEmpty()) stopSelf(startId); return START_NOT_STICKY; }
         if (engine != null && engine.id.equals(id)) return START_NOT_STICKY;
         if (engine != null) engine.cancel();
+        boolean promoted = false;
         try {
             if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 end(id, "error", null, "permission_denied"); return START_NOT_STICKY;
@@ -103,29 +105,49 @@ public final class LocalWakeService extends Service {
             PendingIntent action = PendingIntent.getService(this, 0, stop,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification.Builder builder = notificationBuilder();
+            ongoingNotification = builder;
             Notification notification = builder.setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentTitle("OpenTweek: локальный микрофон")
-                .setContentText("Ожидание «эй твик» / диктовка. Экспериментальный режим.")
+                .setContentText("Загружаем локальную модель. Экспериментальный режим.")
                 .setContentIntent(openRecovery()).setOngoing(true)
                 .addAction(android.R.drawable.ic_media_pause, "Остановить", action).build();
             if (Build.VERSION.SDK_INT >= 29) startForeground(72, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             else startForeground(72, notification);
+            promoted = true;
             LocalWakeEngine next = new LocalWakeEngine(getApplicationContext(), id,
                 (state, text, error) -> main.post(() -> event(id, state, text, error)));
             engine = next;
             worker.execute(next::run);
-        } catch (RuntimeException e) { end(id, "error", null, "recognition_failed"); }
+        } catch (RuntimeException e) { end(id, "error", null, promoted
+            ? LocalVoiceFailure.recognition(e) : LocalVoiceFailure.service(e)); }
         return START_NOT_STICKY;
     }
     private void event(String id, String state, String text, String error) {
         if (!active(id) || engine == null || !engine.id.equals(id)) return;
         if ("released".equals(state)) { end(id, "error", null, "recognition_failed"); return; }
         if ("result".equals(state) || "error".equals(state) || "cancelled".equals(state)) end(id, state, text, error);
-        else { activeState = state; deliver(id, state, text, error); }
+        else {
+            activeState = state;
+            if (ongoingNotification != null) {
+                String content = "waiting".equals(state) ? "Слушаем фразу «эй твик»."
+                    : "recording".equals(state) ? "Записываем диктовку."
+                    : "processing".equals(state) ? "Обрабатываем запись." : null;
+                if (content != null) {
+                    try {
+                        ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(72,
+                            ongoingNotification.setContentText(content).build());
+                    } catch (RuntimeException e) {
+                        end(id, "error", null, LocalVoiceFailure.service(e)); return;
+                    }
+                }
+            }
+            deliver(id, state, text, error);
+        }
     }
     private void end(String id, String state, String text, String error) {
         if (!active(id)) return;
         LocalWakeEngine previous = engine; engine = null;
+        ongoingNotification = null;
         if (previous != null) previous.cancel();
         if ("result".equals(state)) {
             text = text == null ? "" : text.trim();
@@ -159,6 +181,7 @@ public final class LocalWakeService extends Service {
     }
     @Override public void onDestroy() {
         LocalWakeEngine previous = engine; engine = null;
+        ongoingNotification = null;
         if (previous != null) {
             previous.cancel();
             if (active(previous.id)) { activeId = ""; activeState = "idle"; deliver(previous.id, "cancelled", null, null); }
