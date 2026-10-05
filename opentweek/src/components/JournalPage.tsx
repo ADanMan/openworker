@@ -9,6 +9,8 @@ import { JOURNAL_CONTENT_FIELDS } from '../lib/journal'
 import { expand } from '../lib/recurrence'
 import type { Feed, JournalEntry, Task } from '../types'
 import { LocalDictation } from './LocalDictation'
+import { localVoiceBridge } from '../lib/localVoice'
+import { Icon } from './Icon'
 
 export interface JournalTarget { taskId?: string | null; occurrenceDate?: string | null; feedId?: string | null; eventUid?: string | null }
 const fresh = (date: string, target: JournalTarget = {}): JournalDraft => ({ id: uid(), date, text: '', mood: null, ...target })
@@ -17,8 +19,8 @@ const matches = (entry: JournalDraft, target: JournalTarget) => target.taskId
   : target.feedId ? entry.feedId === target.feedId && entry.eventUid === target.eventUid && entry.occurrenceDate === target.occurrenceDate : false
 const preview = (entry: JournalDraft) => entry.text || entry.feelings || entry.thoughts || entry.needs || 'Запись без описания ситуации'
 
-export function JournalPage({ date, calendarId, target, onDate, onOpenTask, onOpenFeed }: {
-  date: string; calendarId: string; target?: JournalTarget; onDate: (date: string) => void
+export function JournalPage({ date, calendarId, target, onOpenTask, onOpenFeed }: {
+  date: string; calendarId: string; target?: JournalTarget
   onOpenTask: (task: Task, occurrenceDate: string | null) => void; onOpenFeed: (date: string) => void
 }) {
   const entries = useLiveQuery(() => db.journalEntries.where('date').equals(date).reverse().sortBy('updatedAt'), [date])
@@ -53,12 +55,13 @@ export function JournalPage({ date, calendarId, target, onDate, onOpenTask, onOp
   }
   const dayItems = expand(tasks.filter((t) => t.calendarId === calendarId), date, date).filter((i) => i.date === date)
   return <main className="journal-page" aria-label="Дневник чувств">
-    <div className="journal-heading"><div><h2>Дневник чувств</h2><p>Можно записать пару слов или пройти по шагам. Все поля необязательны.</p></div>
-      <label className="field"><span>Выбранная дата</span><input type="date" value={date} onChange={(e) => e.target.value && onDate(e.target.value)} /></label>
-    </div>
+    <div className="journal-heading"><div><h2>Дневник чувств</h2><p>Можно записать пару слов или пройти по шагам. Все поля необязательны.</p></div></div>
     <div className="journal-layout">
+      {editor && <JournalEditor key={editor.revision} initial={editor.draft} saved={editor.saved} tasks={tasks} feeds={feeds}
+        onBusy={setBusy} onOpenTask={onOpenTask} onOpenFeed={onOpenFeed}
+        onRemoved={() => setEditor({ draft: fresh(date), saved: null, revision: ++revision.current })} />}
       <aside className="journal-list">
-        <button className="btn primary" disabled={busy} onClick={() => setEditor({ draft: fresh(date), saved: null, revision: ++revision.current })}>Новая запись</button>
+        <button className="btn" disabled={busy} onClick={() => setEditor({ draft: fresh(date), saved: null, revision: ++revision.current })}>Новая запись</button>
         <h3>Записи за день</h3>
         {!entries?.length && <p className="journal-hint">Пока нет сохранённых записей.</p>}
         {entries?.map((entry) => <button className={`journal-entry${editor?.draft.id === entry.id ? ' selected' : ''}`} disabled={busy} key={entry.id} onClick={() => void choose(entry)}>
@@ -77,9 +80,6 @@ export function JournalPage({ date, calendarId, target, onDate, onOpenTask, onOp
         }}>{item.task.title}<span> → запись</span></button>)}
         <p className="journal-hint">Дневник общий для ваших календарей. Записи не включаются в ссылки на задачи и ICS.</p>
       </aside>
-      {editor && <JournalEditor key={editor.revision} initial={editor.draft} saved={editor.saved} tasks={tasks} feeds={feeds}
-        onBusy={setBusy} onOpenTask={onOpenTask} onOpenFeed={onOpenFeed}
-        onRemoved={() => setEditor({ draft: fresh(date), saved: null, revision: ++revision.current })} />}
     </div>
     {error && <p role="alert">{error}</p>}
     <details className="journal-hint journal-privacy"><summary>Хранение и приватность</summary><p>{j('privacy')} Черновики сохраняются локально, отдельно от завершённых записей.</p></details>
@@ -168,6 +168,12 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
     <label className="field"><span>{j('text')}</span><small>Ситуация или свободная запись</small>
       <textarea rows={3} maxLength={JOURNAL_TEXT_MAX_LENGTH} value={draft.text} disabled={busy || saving} placeholder="Что произошло? Можно описать только то, что хочется сохранить."
         onChange={(e) => change({ ...draft, text: e.target.value })} /></label>
+    {error && <p className="journal-error" role="alert">{error}</p>}{status && <p className="journal-save-status" role="status">{status}</p>}
+    <div className="modal-actions journal-save-actions">
+      <button className="btn primary" disabled={busy || saving || !hasJournalContent(draft)} onClick={save}><Icon name="check" /> {saving ? j('saving') : j('save')}</button>
+      <button className="btn" disabled={busy || saving} onClick={discard}>Отменить изменения</button>
+      {baseline && <button className="btn danger" disabled={busy || saving} onClick={remove}>{j('delete')}</button>}
+    </div>
     <button className="btn guidance-toggle" disabled={busy || saving} aria-expanded={guided} onClick={() => setGuided(!guided)}>{guided ? 'Свернуть помощь' : 'Помочь заполнить по шагам'}</button>
     <div className="journal-steps" hidden={!guided}>
       <label className="field" hidden={step !== 0}><span>О чём ситуация?</span><select value={draft.context ?? ''} disabled={busy || saving} onChange={(e) => change({ ...draft, context: (e.target.value || null) as JournalDraft['context'] })}>
@@ -193,16 +199,11 @@ function JournalEditor({ initial, saved, tasks, feeds, onBusy, onOpenTask, onOpe
     <label className="field"><span>{j('mood')}</span><select value={draft.mood ?? ''} disabled={busy || saving} onChange={(e) => change({ ...draft, mood: e.target.value ? Number(e.target.value) as JournalEntry['mood'] : null })}>
       <option value="">{j('noMood')}</option>{([1, 2, 3, 4, 5] as const).map((m) => <option key={m} value={m}>{m} — {j(`mood${m}`)}</option>)}
     </select></label>
-    <label className="field" hidden={guided}><span>Куда вставить диктовку</span><select value={voiceField} disabled={busy || saving} onChange={(e) => setVoiceField(e.target.value)}>
-      <option value="text">Ситуация / свободная запись</option>{JOURNAL_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-    </select></label>
+    {!!localVoiceBridge() && !guided && <details className="dictation-destination"><summary>Диктовка: {voiceField === 'text' ? 'свободная запись' : JOURNAL_FIELDS.find(f => f.key === voiceField)?.label}</summary>
+      <label className="field"><span>Куда вставить диктовку</span><select value={voiceField} disabled={busy || saving} onChange={(e) => setVoiceField(e.target.value)}>
+        <option value="text">Ситуация / свободная запись</option>{JOURNAL_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+      </select></label></details>}
     <LocalDictation allowWake onBusy={setBusy} onText={(text) => append(currentField, text)} onRecoveredText={recover} />
     <p className="journal-hint">Черновик сохраняется автоматически. Диктовка: {guided ? JOURNAL_FIELDS[step].label : 'выбранный раздел'}.</p>
-    {error && <p className="journal-error" role="alert">{error}</p>}{status && <p className="journal-save-status" role="status">{status}</p>}
-    <div className="modal-actions journal-save-actions">
-      <button className="btn primary" disabled={busy || saving || !hasJournalContent(draft)} onClick={save}>{saving ? j('saving') : j('save')}</button>
-      <button className="btn" disabled={busy || saving} onClick={discard}>Отменить изменения</button>
-      {baseline && <button className="btn danger" disabled={busy || saving} onClick={remove}>{j('delete')}</button>}
-    </div>
   </section>
 }

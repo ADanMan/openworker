@@ -36,15 +36,15 @@ export function BackgroundVoiceMode() {
   const phase=status.wakeState==='review'?'Микрофон выключен · проверка записи':status.wakeState==='recording'?'Записываем диктовку':status.wakeState==='processing'?'Обрабатываем диктовку':status.overlayStarting || requestedId?'Ожидаем разрешений Android':status.wakeState==='loading'?'Загружаем модель':'Микрофон включён · ждём «эй, Твик»'
   return <details className="background-voice-mode" open={active || !!status.overlayError || !!localError || undefined}>
     <summary>«Эй, Твик» из других приложений {active?'· включено':''}</summary>
-    <p>Явный сеанс до 1 часа: после фразы откроется небольшое окно дневника. Микрофон постоянно слушает и расходует батарею. После сохранения или отмены снова ждём фразу; качество экспериментальное.</p>
-    <p>Нужны микрофон, уведомления и разрешение «Поверх других приложений». На заблокированном экране режим завершится. После force-stop или перезагрузки включите его снова вручную. Некоторые приложения могут скрывать сторонние окна.</p>
-    {active ? <><p role="status">{phase}{status.overlayActive?` · осталось ${Math.ceil((status.overlayRemaining || 0)/60000)} мин.`:''}</p>
+    {active ? <><p className="voice-session-status" role="status"><span className={`voice-state-dot${status.wakeState === 'review' ? ' paused' : ''}`} aria-hidden="true" />{phase}{status.overlayActive?` · осталось ${Math.ceil((status.overlayRemaining || 0)/60000)} мин.`:''}</p>
       <button className="btn" onClick={()=> {
         const id = requested.current || status.wakeSessionId || ''
         setConsent(false); requested.current = ''; setRequestedId('')
         if (bridge.stopLocalOverlay) bridge.stopLocalOverlay(id); else bridge.cancelLocalVoice(id)
       }}>Выключить вызов из приложений</button></>
     : <>
+      <p>До 1 часа: после «эй, Твик» откроется окно дневника. Микрофон слушает постоянно и расходует батарею. После сохранения или отмены снова ждём фразу. Распознавание экспериментальное.</p>
+      <details className="voice-prerequisites"><summary>Разрешения и границы сеанса</summary><p>Нужны микрофон, видимые уведомления и разрешение «Поверх других приложений». Блокировка или выключение экрана завершит сеанс. После force-stop или перезагрузки включите его вручную. Некоторые приложения могут скрывать окно.</p></details>
       {!status.modelReady && <p>Сначала скачайте локальную модель в разделе диктовки дневника.</p>}
       {status.pendingResult && <p>Сначала проверьте прежнюю диктовку в дневнике: вставьте или удалите её.</p>}
       {!status.overlayAllowed && <button className="btn" onClick={()=>{setError('');bridge.requestLocalOverlayPermission!()}}>Разрешить окно в настройках Android</button>}
@@ -55,6 +55,7 @@ export function BackgroundVoiceMode() {
         try { bridge.startLocalOverlay!(id) } catch { requested.current = ''; setRequestedId(''); setError('Не удалось запустить сеанс.') }
       }}>Включить на 1 час</button>
     </>}
+    {active && <p className="voice-session-hint">Локально · экран должен оставаться разблокированным. Выключение экрана завершит сеанс.</p>}
     {(status.overlayError || localError) && <p className="journal-error" role="alert">{localError || errors[status.overlayError!] || 'Сеанс остановлен: микрофон или распознавание недоступны.'}</p>}
   </details>
 }

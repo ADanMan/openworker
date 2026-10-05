@@ -25,6 +25,8 @@ function AddLine({ container }: { container: ContainerId }) {
         data-add={container}
         value={value}
         aria-label={t('addTask')}
+        placeholder={`+ ${t('addTask')}`}
+        enterKeyHint="done"
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') void submit()

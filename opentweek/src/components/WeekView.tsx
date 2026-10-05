@@ -9,7 +9,7 @@ function DayHeader({ date }: { date: string }) {
   const d = fromISODate(date)
   return (
     <header className={`day-header${date === today ? ' today' : ''}`}>
-      <button className="day-date" onClick={() => goToDate(date, 'month')} title={t('openMonth')}>
+      <button className="day-date" aria-label={`${fmt(d, 'd MMMM yyyy')} · ${t('openMonth')}`} onClick={() => goToDate(date, 'month')} title={t('openMonth')}>
         <span className="day-num">{fmt(d, 'd')}</span>
         <span className="day-month">{fmt(d, 'MMM')}</span>
       </button>

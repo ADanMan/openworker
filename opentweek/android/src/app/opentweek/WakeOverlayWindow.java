@@ -25,10 +25,10 @@ final class WakeOverlayWindow {
         int screenHeight = service.getResources().getDisplayMetrics().heightPixels;
         root = new LinearLayout(service); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.WHITE);
         LinearLayout header = new LinearLayout(service);
-        TextView title = new TextView(service); title.setText("OpenTweek · дневник"); title.setTextColor(Color.BLACK);
+        TextView title = new TextView(service); title.setText("OpenTweek · дневник"); title.setTextColor(Color.WHITE);
+        header.setBackgroundColor(Color.rgb(24, 35, 55));
         title.setPadding((int)(12*density), 0, 0, 0); header.addView(title, new LinearLayout.LayoutParams(0, -1, 1));
-        Button cancel = new Button(service); cancel.setText("Отмена"); cancel.setOnClickListener(v -> service.cancelOverlayCapture(owner)); header.addView(cancel);
-        Button stop = new Button(service); stop.setText("Выключить"); stop.setOnClickListener(v -> LocalWakeService.cancel(service, owner)); header.addView(stop);
+        Button stop = new Button(service); stop.setText("Выключить"); stop.setContentDescription("Выключить голосовой сеанс"); stop.setOnClickListener(v -> LocalWakeService.cancel(service, owner)); header.addView(stop);
         root.addView(header, new LinearLayout.LayoutParams(-1, (int)(52*density)));
         web = new WebView(service); WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMediaPlaybackRequiresUserGesture(true);
