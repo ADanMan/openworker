@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { overlayReceipt, saveOverlayEntry } from './lib/journalWake'
 import { JOURNAL_TEXT_MAX_LENGTH } from './lib/journal'
+import { useSettings } from './hooks/data'
+import { useTheme } from './hooks/theme'
+import { Icon } from './components/Icon'
+import './fonts.css'
 import './overlay.css'
 interface Pending { sessionId: string; text: string; date: string }
 interface Status { sessionId: string; state: string; result?: Pending }
@@ -11,12 +15,15 @@ interface Bridge {
 }
 declare global { interface Window { OpenTweekOverlay?: Bridge } }
 export function Overlay() {
+  useTheme(useSettings())
   const bridge = window.OpenTweekOverlay
   const [status, setStatus] = useState<Status>({sessionId:'',state:'loading'})
   const [text, setText] = useState(''), [date, setDate] = useState(''), [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [checking, setChecking] = useState(true), [committed, setCommitted] = useState(false)
   const seen = useRef(''), operation = useRef(false)
+  const feedback = useRef<HTMLParagraphElement>(null)
+  useEffect(() => { if (error) feedback.current?.scrollIntoView({block:'start'}) }, [error])
   useEffect(() => {
     let attached = true
     const refresh = () => {
@@ -55,19 +62,25 @@ export function Overlay() {
   if (!bridge) return <main><p>Это окно доступно в Android Preview после явного включения режима.</p></main>
   return <main aria-label="Окно диктовки дневника">
     {status.state === 'review' && status.result ? <>
-      <h1>Проверьте запись</h1>
+      <header className="popup-heading"><h1>{committed?'Запись сохранена':'Проверьте запись'}</h1><span className="popup-state"><Icon name="check" size={14} /> Микрофон выключен</span></header>
+      <div className="popup-fields">
       <label>Дата <input aria-label="Дата записи" type="date" value={date} disabled={saving || checking || committed} onChange={e=>setDate(e.target.value)} /></label>
       <label>Текст <textarea aria-label="Текст записи" rows={3} maxLength={JOURNAL_TEXT_MAX_LENGTH} value={text} disabled={saving || checking || committed} onChange={e=>setText(e.target.value)} /></label>
+      <p>{committed?'Изменить запись можно в дневнике.':'После сохранения или отмены снова ждём фразу.'}</p>
+      {error && <p ref={feedback} className="error" role="alert">{error}</p>}
+      </div><footer className="popup-actions">
       <button disabled={saving || checking || !text.trim() || !date} onClick={()=>void save()}>{saving?'Сохраняем…':committed?'Повторить подтверждение':'Сохранить запись'}</button>
       <button className="secondary" disabled={saving} onClick={()=>bridge.cancel()}>{committed?'Закрыть сохранённую запись':'Отменить диктовку'}</button>
-      <p>{committed?'Запись уже добавлена. Дальнейшие изменения доступны в дневнике.':'Новая запись дневника.'} После сохранения или отмены снова ждём фразу.</p>
+      </footer>
     </> : <>
-      <h1 role="status">{status.state==='recording'?'Микрофон включён · говорите':status.state==='processing'?'Обрабатываем на телефоне…':status.state==='stopped'?'Сеанс завершён':'Готовим диктовку…'}</h1>
-      <p>Опишите, что произошло и как вы себя чувствуете. Затем проверьте текст перед сохранением.</p>
+      <header className="popup-heading"><h1 role="status">{status.state==='recording'?'Микрофон включён · говорите':status.state==='processing'?'Обрабатываем на телефоне…':status.state==='stopped'?'Сеанс завершён':'Готовим диктовку…'}</h1><span className={`popup-state${status.state==='recording'?' recording':''}`}><Icon name="mic" size={14} /> На этом телефоне</span></header>
+      <div className="popup-fields"><p>Опишите ситуацию и чувства. Завершите диктовку, затем проверьте текст перед сохранением.</p>
+      {error && <p ref={feedback} className="error" role="alert">{error}</p>}
+      </div><footer className="popup-actions">
       {status.state==='recording' && <button onClick={()=>bridge.finish()}>Завершить диктовку</button>}
       <button className="secondary" onClick={()=>bridge.cancel()}>Отменить диктовку</button>
+      </footer>
     </>}
-    {error && <p className="error" role="alert">{error}</p>}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<Overlay />)

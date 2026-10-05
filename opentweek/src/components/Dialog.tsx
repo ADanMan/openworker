@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Icon } from './Icon'
+import { t } from '../i18n'
 
 export function Dialog({
   title,
@@ -29,7 +30,7 @@ export function Dialog({
       <div className="modal-body">
         <div className="modal-top">
           <h2>{title}</h2>
-          <button className="icon-btn" aria-label="Close" onClick={() => { if (canClose()) ref.current?.close() }}>
+          <button className="icon-btn" aria-label={t('close')} onClick={() => { if (canClose()) ref.current?.close() }}>
             <Icon name="close" />
           </button>
         </div>

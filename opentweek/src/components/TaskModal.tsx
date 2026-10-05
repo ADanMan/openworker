@@ -70,6 +70,7 @@ export function TaskModal({ item, lists, onClose, onOpenJournal }: { item: Item;
           </button>
           <input
             className="title-input"
+            aria-label={t('task')}
             defaultValue={task.title}
             key={task.id}
             placeholder={t('task')}

@@ -20,6 +20,7 @@ import { BoardContext, type BoardState } from './board'
 import { ensureSeed, updateSettings } from './db'
 import { useFeedSync, useReminders, useRollover, useToday } from './hooks/background'
 import { useCalendars, useFeeds, useLists, useSettings, useTasks } from './hooks/data'
+import { useTheme } from './hooks/theme'
 import { fromISODate, isoAddDays, monthGrid, shift, toISODate, weekDays, weekNumber } from './lib/dates'
 import { expand } from './lib/recurrence'
 import { decodeShare, type SharePayload } from './lib/share'
@@ -58,17 +59,6 @@ const collision: CollisionDetection = (args) => {
     return item ? [item] : hits
   }
   return closestCenter(args)
-}
-
-function useTheme(settings: Settings | undefined) {
-  useEffect(() => {
-    if (!settings) return
-    const root = document.documentElement
-    root.dataset.theme = settings.theme === 'system' ? '' : settings.theme
-    root.dataset.accent = settings.accent
-    root.dataset.paper = settings.paper
-    root.style.setProperty('--scale', String(settings.fontScale))
-  }, [settings])
 }
 
 export default function App() {
@@ -351,6 +341,44 @@ function Board({ settings }: { settings: Settings }) {
               ))}
             </select>
           </div>
+          <div className="tools" aria-label="Действия приложения">
+            {canVoice && mode === 'calendar' && (
+              <button className="icon-btn" aria-label={t('voiceTask')} title={`${t('voiceTask')} (V)`} onClick={startVoice}>
+                <Icon name="mic" />
+              </button>
+            )}
+            {mode === 'calendar' && <>
+            <button className="icon-btn" aria-label={t('search')} title={`${t('search')} (/)`} onClick={() => setPanel('search')}>
+              <Icon name="search" />
+            </button>
+            <button
+              className={`icon-btn${settings.hideCompleted ? ' active' : ''}`}
+              aria-label={settings.hideCompleted ? t('showCompleted') : t('hideCompleted')}
+              aria-pressed={settings.hideCompleted}
+              title={`${t('hideCompleted')} (H)`}
+              onClick={() => updateSettings({ hideCompleted: !settings.hideCompleted })}
+            >
+              <Icon name={settings.hideCompleted ? 'eyeOff' : 'eye'} />
+            </button>
+            <button className="icon-btn hide-mobile" aria-label={t('print')} title={`${t('print')} (P)`} onClick={() => window.print()}>
+              <Icon name="print" />
+            </button>
+            <button className="icon-btn hide-mobile" aria-label={t('shortcuts')} title={`${t('shortcuts')} (?)`} onClick={() => setPanel('shortcuts')}>
+              <Icon name="keyboard" />
+            </button>
+            </>}
+            <button className="icon-btn" aria-label={t('settings')} title={`${t('settings')} (,)`} onClick={() => setPanel('settings')}>
+              <Icon name="settings" />
+            </button>
+          </div>
+        </header>
+
+        <nav className="mode-bar" aria-label="Режим приложения">
+          <button className={`btn${mode === 'calendar' ? ' primary' : ''}`} aria-pressed={mode === 'calendar'} onClick={() => setMode('calendar')}><Icon name="calendar" /> Календарь</button>
+          <button className={`btn${mode === 'journal' ? ' primary' : ''}`} aria-label="Дневник чувств" aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}><Icon name="note" /> Дневник</button>
+          <label><span>Дата</span><input type="date" aria-label="Общая дата" value={selectedDate} onChange={(e) => e.target.value && changeDate(e.target.value)} /></label>
+        </nav>
+        <div className="planner-toolbar">
           <div className="period">
             <h1>{mode === 'journal' ? fmt(anchor, 'd MMMM yyyy') : title}</h1>
             {mode === 'calendar' && view === 'week' && settings.showWeekNumbers && <span className="week-badge">W{weekNumber(days[3])}</span>}
@@ -365,7 +393,7 @@ function Board({ settings }: { settings: Settings }) {
             <button className="icon-btn" aria-label={t('next')} onClick={() => changeDate(mode === 'journal' ? isoAddDays(selectedDate, 1) : toISODate(shift(anchor, view, 1)))}>
               <Icon name="right" />
             </button>
-            <div className="segmented" role="tablist" hidden={mode === 'journal'}>
+            <div className="segmented" role="tablist" aria-label="Вид календаря" hidden={mode === 'journal'}>
               {(['week', 'month'] as const).map((v) => (
                 <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'on' : ''} onClick={() => updateSettings({ view: v })}>
                   {v === 'week' ? t('week') : t('month')}
@@ -373,42 +401,9 @@ function Board({ settings }: { settings: Settings }) {
               ))}
             </div>
           </nav>
-          <div className="tools">
-            {canVoice && mode === 'calendar' && (
-              <button className="icon-btn" aria-label={t('voiceTask')} title={`${t('voiceTask')} (V)`} onClick={startVoice}>
-                <Icon name="mic" />
-              </button>
-            )}
-            <button className="icon-btn" aria-label={t('search')} title={`${t('search')} (/)`} onClick={() => setPanel('search')}>
-              <Icon name="search" />
-            </button>
-            <button
-              className={`icon-btn${settings.hideCompleted ? ' active' : ''}`}
-              aria-label={settings.hideCompleted ? t('showCompleted') : t('hideCompleted')}
-              title={`${t('hideCompleted')} (H)`}
-              onClick={() => updateSettings({ hideCompleted: !settings.hideCompleted })}
-            >
-              <Icon name={settings.hideCompleted ? 'eyeOff' : 'eye'} />
-            </button>
-            <button className="icon-btn hide-mobile" aria-label={t('print')} title={`${t('print')} (P)`} onClick={() => window.print()}>
-              <Icon name="print" />
-            </button>
-            <button className="icon-btn hide-mobile" aria-label={t('shortcuts')} title={`${t('shortcuts')} (?)`} onClick={() => setPanel('shortcuts')}>
-              <Icon name="keyboard" />
-            </button>
-            <button className="icon-btn" aria-label={t('settings')} title={`${t('settings')} (,)`} onClick={() => setPanel('settings')}>
-              <Icon name="settings" />
-            </button>
-          </div>
-        </header>
-
-        <div className="mode-bar" aria-label="Режим приложения">
-          <button className={`btn${mode === 'calendar' ? ' primary' : ''}`} aria-pressed={mode === 'calendar'} onClick={() => setMode('calendar')}>Календарь</button>
-          <button className={`btn${mode === 'journal' ? ' primary' : ''}`} aria-label="Дневник чувств" aria-pressed={mode === 'journal'} onClick={() => setMode('journal')}>Дневник</button>
-          <label>Дата <input type="date" aria-label="Общая дата" value={selectedDate} onChange={(e) => e.target.value && changeDate(e.target.value)} /></label>
         </div>
         <BackgroundVoiceMode />
-        {mode === 'journal' ? <JournalPage key={`${selectedDate}:${JSON.stringify(journalTarget)}`} date={selectedDate} calendarId={calendarId} target={journalTarget} onDate={changeDate}
+        {mode === 'journal' ? <JournalPage key={`${selectedDate}:${JSON.stringify(journalTarget)}`} date={selectedDate} calendarId={calendarId} target={journalTarget}
           onOpenTask={async (task, date) => { await updateSettings({ activeCalendarId: task.calendarId }); setAnchor(fromISODate(date ?? task.date ?? selectedDate)); setMode('calendar'); setOpenKey({ id: task.id, date }) }}
           onOpenFeed={(date) => { changeDate(date); setMode('calendar') }} /> : <DndContext
           sensors={sensors}
@@ -421,11 +416,11 @@ function Board({ settings }: { settings: Settings }) {
             setOverContainer(null)
           }}
         >
-          <main className="board" ref={boardRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <main className="board" aria-label="Календарь" ref={boardRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {view === 'week' ? <WeekView days={days} /> : <MonthView weeks={grid} month={anchor.getMonth()} />}
           </main>
           <section className={`someday-wrap${settings.showSomeday ? '' : ' collapsed'}`}>
-            <button className="someday-toggle" onClick={() => updateSettings({ showSomeday: !settings.showSomeday })}>
+            <button className="someday-toggle" aria-expanded={settings.showSomeday} onClick={() => updateSettings({ showSomeday: !settings.showSomeday })}>
               <Icon name="chevronDown" size={14} /> {t('someday')}
             </button>
             {settings.showSomeday && <SomedayPanel lists={lists} />}
